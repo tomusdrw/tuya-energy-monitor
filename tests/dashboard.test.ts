@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Dashboard } from '../src/App.js';
+import { AlertList } from '../src/components.js';
+import { LanguageProvider } from '../src/i18n.js';
 import { openDatabase } from '../server/db.js';
 import { getOverview } from '../server/energy.js';
 
@@ -26,8 +28,60 @@ test('dashboard exposes account failures even when no devices have been discover
     'Owner must see the account error on the overview',
   );
   assert.ok(html.includes('Drugie konto'), 'Owner must know which account needs attention');
+  assert.ok(html.includes('Energy usage'), 'The dashboard defaults to English');
+  assert.ok(html.includes('Check connection'));
   assert.ok(html.includes('href="#accounts"'));
+  db.prepare('UPDATE accounts SET error = ?').run('Account not found.');
+  const polishHtml = renderToStaticMarkup(
+    createElement(LanguageProvider, {
+      initialLanguage: 'pl',
+      children: createElement(Dashboard, {
+        data: getOverview(db, Date.now()),
+        days: 14,
+        setDays: () => {},
+      }),
+    }),
+  );
+  assert.ok(polishHtml.includes('Nie znaleziono konta.'));
+  assert.ok(polishHtml.includes('Konto Drugie konto wymaga uwagi.'));
   db.close();
+});
+
+test('notification details use the selected language without changing original content', () => {
+  const notification = {
+    id: 'n',
+    homeId: 'h',
+    kind: 'threshold',
+    title: 'Daily limit exceeded: Mieszkanie A',
+    body: 'Observed energy: 12.50 kWh.',
+    translations: {
+      pl: {
+        title: 'Przekroczony próg dzienny: Mieszkanie A',
+        body: 'Zaobserwowana energia: 12,50 kWh.',
+      },
+    },
+    createdAt: Date.parse('2026-10-16T10:00Z'),
+    status: 'retry',
+    sentAt: null,
+    error: 'Delivery was not confirmed. We will retry with the same identifier.',
+  };
+  const english = renderToStaticMarkup(createElement(AlertList, { items: [notification] }));
+  assert.ok(english.includes('Daily limit exceeded: Mieszkanie A'));
+  assert.ok(english.includes('Observed energy: 12.50 kWh.'));
+  assert.ok(english.includes('Retrying'));
+  assert.ok(english.includes('Notification details'));
+  const polish = renderToStaticMarkup(
+    createElement(LanguageProvider, {
+      initialLanguage: 'pl',
+      children: createElement(AlertList, { items: [notification] }),
+    }),
+  );
+  assert.ok(polish.includes('Przekroczony próg dzienny: Mieszkanie A'));
+  assert.ok(polish.includes('Zaobserwowana energia: 12,50 kWh.'));
+  assert.ok(polish.includes('Ponowna próba'));
+  assert.ok(polish.includes('Szczegóły powiadomienia'));
+  assert.ok(polish.includes('Nie potwierdzono wysyłki.'));
+  assert.equal(notification.body, 'Observed energy: 12.50 kWh.');
 });
 
 test('mixed totals identify estimates in dashboard, cards, chart and source breakdown', async () => {
@@ -68,9 +122,26 @@ test('mixed totals identify estimates in dashboard, cards, chart and source brea
   const html = renderToStaticMarkup(
     createElement(Dashboard, { data: getOverview(db, now), days: 14, setDays: () => {} }),
   );
-  assert.ok(html.includes('≈ 1,00'), 'Any displayed total containing estimates must be marked');
-  assert.ok(html.includes('Estymacja:'), 'Owner can separate estimated and measured totals');
-  assert.ok(html.includes('Czas grzania × moc'), 'Chart explains its estimated series');
+  assert.ok(html.includes('≈ 1.00'), 'English totals use English decimal formatting');
+  assert.ok(html.includes('Estimated:'), 'Owner can separate estimated and measured totals');
+  assert.ok(html.includes('Heating time × power'), 'Chart explains its estimated series');
+  assert.ok(html.includes('aria-label="Daily energy usage in kilowatt-hours"'));
+  const polishHtml = renderToStaticMarkup(
+    createElement(LanguageProvider, {
+      initialLanguage: 'pl',
+      children: createElement(Dashboard, {
+        data: getOverview(db, now),
+        days: 14,
+        setDays: () => {},
+      }),
+    }),
+  );
+  assert.ok(polishHtml.includes('Zużycie energii'));
+  assert.ok(polishHtml.includes('≈ 1,00'), 'Polish totals use Polish decimal formatting');
+  assert.ok(polishHtml.includes('Estymacja:'));
+  assert.ok(polishHtml.includes('Czas grzania × moc'));
+  assert.ok(polishHtml.includes('aria-label="Dzienne zużycie energii w kilowatogodzinach"'));
+  assert.ok(polishHtml.includes('<h3>Home</h3>'), 'The selected language preserves home names');
   db.close();
 });
 
@@ -111,10 +182,10 @@ test('estimation form exposes unknown state and requires a real heating signal w
   const html = renderToStaticMarkup(
     createElement(EstimationForm, { device: getDevice(db, d, now)!, onSaved: () => {} }),
   );
-  assert.ok(html.includes('Stan grzania nieznany'));
-  assert.ok(html.includes('Moc ogrzewania (kW)'));
+  assert.ok(html.includes('Heating state unknown'));
+  assert.ok(html.includes('Heating power (kW)'));
   assert.ok(html.includes('switch'));
-  assert.ok(html.includes('Samo włączenie termostatu'));
+  assert.ok(html.includes('Turning the thermostat on'));
   assert.ok(!html.includes('checked=""'), 'Estimation must not enable itself');
   db.close();
 });

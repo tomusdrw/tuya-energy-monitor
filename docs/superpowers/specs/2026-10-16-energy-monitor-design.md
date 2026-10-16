@@ -23,7 +23,8 @@ produced by GitHub Actions for self-hosting via Nori. Public MIT repository.
 React + TypeScript, Fastify, Node 24, SQLite on a persistent volume. A small
 Python subprocess uses the official Tuya sharing SDK for QR and read-only
 collection, avoiding a second implementation of its protocol. One container.
-Polish interface, Europe/Warsaw calendar, light neutral dashboard with blue
+English-default interface with a browser-persisted English/Polish selector,
+Europe/Warsaw calendar, light neutral dashboard with blue
 accents, accessible responsive forms and charts. No Sites hosting: existing
 GitHub repository and Docker deployment are the user's chosen destination.
 
@@ -73,6 +74,10 @@ unprivileged. No default password, no production demo readings.
 
 Empty states explain how to connect accounts and why history starts at the
 first two usable readings. Loading, errors and save results are visible.
+The language selector is available before and after login. Interface dates and
+numbers follow the chosen language; user-provided names remain unchanged. New
+email notifications use English independently of the browser preference. Existing
+notification text and already attempted email payloads are retained.
 
 ## Delivery and validation
 

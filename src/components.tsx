@@ -9,24 +9,10 @@ import {
   Zap,
 } from 'lucide-react';
 import type { EnergyStats, HistoryPoint, HomeView, NotificationView } from '../shared/types';
+import { localizeNotification } from '../shared/notificationMessages';
+import { useI18n } from './i18n';
+import { componentMessages } from './locales/components';
 
-export const number = (value: number | null | undefined, digits = 2) =>
-  value === null || value === undefined
-    ? '—'
-    : new Intl.NumberFormat('pl-PL', {
-        maximumFractionDigits: digits,
-        minimumFractionDigits: digits,
-      }).format(value);
-export const percent = (value: number) => `${Math.round(value * 100)}%`;
-export const date = (at: number | null | undefined, withTime = true) =>
-  at
-    ? new Intl.DateTimeFormat('pl-PL', {
-        timeZone: 'Europe/Warsaw',
-        day: '2-digit',
-        month: 'short',
-        ...(withTime ? ({ hour: '2-digit', minute: '2-digit' } as const) : {}),
-      }).format(at)
-    : 'Jeszcze nie odczytano';
 export function Brand() {
   return (
     <a href="#" className="brand">
@@ -57,9 +43,10 @@ export function Notice({ children, tone = 'info' }: { children: ReactNode; tone?
   );
 }
 export function Loading() {
+  const { t } = useI18n(componentMessages);
   return (
     <div className="loading" role="status">
-      <LoaderCircle className="spin" size={22} /> Wczytuję dane…
+      <LoaderCircle className="spin" size={22} /> {t('Loading data…')}
     </div>
   );
 }
@@ -121,29 +108,37 @@ export function PageTitle({
     </header>
   );
 }
-export const energyNumber = (stats: Pick<EnergyStats, 'kwh' | 'estimatedKwh'>) =>
-  `${stats.estimatedKwh !== null ? '≈ ' : ''}${number(stats.kwh)}`;
 export function EnergyBreakdown({ stats }: { stats: EnergyStats }) {
+  const { t, number } = useI18n(componentMessages);
   if (stats.estimatedKwh === null) return null;
   return (
     <div className="energy-breakdown">
-      <span>Pomiar: {number(stats.measuredKwh)} kWh</span>
-      <span>Estymacja: {number(stats.estimatedKwh)} kWh</span>
+      <span>{t('Measured: {energy} kWh', { energy: number(stats.measuredKwh) })}</span>
+      <span>{t('Estimated: {energy} kWh', { energy: number(stats.estimatedKwh) })}</span>
     </div>
   );
 }
 export function Coverage({ stats }: { stats: EnergyStats }) {
+  const { t, number, percent } = useI18n(componentMessages);
   return (
     <span className="coverage">
       <span className={`status-dot ${stats.complete ? 'green' : 'amber'}`} />
-      {stats.metered} z licznikiem · {stats.estimated} z estymacją / {stats.monitored} wybranych ·{' '}
-      {percent(stats.coverage)} pokrycia czasu
+      {t(
+        '{metered} metered · {estimated} estimated / {monitored} selected · {coverage} time coverage',
+        {
+          metered: number(stats.metered, 0),
+          estimated: number(stats.estimated, 0),
+          monitored: number(stats.monitored, 0),
+          coverage: percent(stats.coverage),
+        },
+      )}
     </span>
   );
 }
 export function Range({ days, setDays }: { days: number; setDays: (days: number) => void }) {
+  const { t } = useI18n(componentMessages);
   return (
-    <div className="segmented" aria-label="Zakres historii">
+    <div className="segmented" aria-label={t('History range')}>
       {[7, 14, 30].map((n) => (
         <button
           key={n}
@@ -151,7 +146,7 @@ export function Range({ days, setDays }: { days: number; setDays: (days: number)
           aria-pressed={days === n}
           onClick={() => setDays(n)}
         >
-          {n} dni
+          {t('{days} days', { days: n })}
         </button>
       ))}
     </div>
@@ -159,11 +154,13 @@ export function Range({ days, setDays }: { days: number; setDays: (days: number)
 }
 
 export function EnergyChart({ points }: { points: HistoryPoint[] }) {
+  const { t, number, percent, day, energyNumber } = useI18n(componentMessages);
   if (!points.some((p) => p.kwh !== null))
     return (
-      <Empty title="Historia właśnie się zaczyna">
-        Wykres pojawi się po dwóch poprawnych odczytach licznika lub skonfigurowanego stanu grzania.
-        Nie pobieramy wcześniejszej historii z aplikacji Tuya.
+      <Empty title={t('Your history starts here')}>
+        {t(
+          'The chart will appear after two valid meter readings or configured heating-state readings. We do not import earlier history from the Tuya app.',
+        )}
       </Empty>
     );
   const max = Math.max(1, ...points.map((p) => p.kwh ?? 0));
@@ -177,7 +174,7 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
       <svg
         viewBox={`0 0 ${width} ${height}`}
         role="img"
-        aria-label="Dzienne zużycie energii w kilowatogodzinach"
+        aria-label={t('Daily energy usage in kilowatt-hours')}
       >
         {[0, 0.5, 1].map((v) => (
           <g key={v}>
@@ -201,9 +198,16 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
           return (
             <g key={p.day}>
               <title>
-                {p.day}: {p.kwh === null ? 'brak danych' : `${energyNumber(p)} kWh`}; pomiar:{' '}
-                {number(p.measuredKwh)} kWh; estymacja: {number(p.estimatedKwh)} kWh; pokrycie{' '}
-                {percent(p.coverage)}
+                {t(
+                  '{day}: {total}; measured: {measured} kWh; estimated: {estimated} kWh; coverage: {coverage}',
+                  {
+                    day: day(p.day),
+                    total: p.kwh === null ? t('No data') : `${energyNumber(p)} kWh`,
+                    measured: number(p.measuredKwh),
+                    estimated: number(p.estimatedKwh),
+                    coverage: percent(p.coverage),
+                  },
+                )}
               </title>
               {p.kwh === null ? (
                 <rect
@@ -245,7 +249,7 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
                   textAnchor="middle"
                   className="chart-label"
                 >
-                  {p.day.slice(8)}.{p.day.slice(5, 7)}
+                  {day(p.day)}
                 </text>
               )}
             </g>
@@ -255,23 +259,24 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
       <div className="chart-legend">
         <span>
           <i className="legend-blue" />
-          Licznik energii
+          {t('Energy meter')}
         </span>
         <span>
           <i className="legend-purple" />
-          Czas grzania × moc
+          {t('Heating time × power')}
         </span>
         <span>
           <i className="legend-gray" />
-          Brak danych
+          {t('No data')}
         </span>
-        <span>Jaśniejszy słupek = częściowe dane</span>
+        <span>{t('Lighter bar = partial data')}</span>
       </div>
     </div>
   );
 }
 
 export function HomeCard({ home }: { home: HomeView }) {
+  const { t, number, energyNumber } = useI18n(componentMessages);
   const limit = home.rules.dailyLimit,
     exceeded = limit !== null && home.stats.kwh !== null && home.stats.kwh >= limit;
   return (
@@ -282,22 +287,22 @@ export function HomeCard({ home }: { home: HomeView }) {
         </span>
         <Badge tone={exceeded ? 'danger' : home.stats.complete ? 'success' : 'warning'}>
           {exceeded
-            ? 'Przekroczony próg'
+            ? t('Limit exceeded')
             : home.stats.kwh === null
-              ? 'Brak pomiaru'
+              ? t('No reading')
               : home.stats.complete
-                ? 'Aktualne dane'
-                : 'Częściowe dane'}
+                ? t('Up to date')
+                : t('Partial data')}
         </Badge>
       </div>
       <h3>{home.name}</h3>
       <p className="subtle">
-        {home.accountLabel} · {home.deviceCount} urządzeń
+        {home.accountLabel} · {t('Devices: {count}', { count: number(home.deviceCount, 0) })}
       </p>
       <div className="home-value">
         {energyNumber(home.stats)}{' '}
         <span>
-          kWh <small>dzisiaj</small>
+          kWh <small>{t('today')}</small>
         </span>
       </div>
       <EnergyBreakdown stats={home.stats} />
@@ -311,8 +316,8 @@ export function HomeCard({ home }: { home: HomeView }) {
       <div className="meter-caption">
         <span>
           {limit !== null
-            ? `Próg: ${number(limit, 1)} kWh / dzień`
-            : 'Nie ustawiono progu dziennego'}
+            ? t('Limit: {energy} kWh / day', { energy: number(limit, 1) })
+            : t('No daily limit set')}
         </span>
         <ArrowRight size={17} />
       </div>
@@ -324,46 +329,55 @@ export function HomeCard({ home }: { home: HomeView }) {
 }
 
 export function AlertList({ items }: { items: NotificationView[] }) {
+  const { t, date, language } = useI18n(componentMessages);
   if (!items.length)
     return (
-      <Empty title="Tutaj pojawią się powiadomienia">
-        Ustaw próg w mieszkaniu. Wykrywanie anomalii zacznie działać po zebraniu co najmniej 7
-        porównywalnych dni.
+      <Empty title={t('Notifications will appear here')}>
+        {t(
+          'Set a limit for an apartment. Anomaly detection starts after at least 7 comparable days have been collected.',
+        )}
       </Empty>
     );
   const labels: Record<string, string> = {
-    pending: 'Oczekuje',
-    sent: 'Wysłano',
-    retry: 'Ponowna próba',
-    uncertain: 'Sprawdź dostarczenie',
-    failed: 'Błąd wysyłki',
-    expired: 'Przeterminowane',
+    pending: 'Pending',
+    sent: 'Sent',
+    retry: 'Retrying',
+    uncertain: 'Check delivery',
+    failed: 'Delivery failed',
+    expired: 'Expired',
   };
   return (
     <div className="alert-list">
-      {items.map((item) => (
-        <article className="alert-item" key={item.id}>
-          <span className={`alert-icon ${item.kind === 'weekly' ? 'blue' : ''}`}>
-            {item.kind === 'weekly' ? <CheckCircle2 size={21} /> : <AlertTriangle size={21} />}
-          </span>
-          <div className="alert-content">
-            <div className="alert-heading">
-              <h3>
-                {item.homeId ? <a href={`#home/${item.homeId}`}>{item.title}</a> : item.title}
-              </h3>
-              <Badge tone={item.status === 'sent' ? 'success' : 'warning'}>
-                {labels[item.status] ?? item.status}
-              </Badge>
+      {items.map((item) => {
+        const content = localizeNotification(item, language);
+        return (
+          <article className="alert-item" key={item.id}>
+            <span className={`alert-icon ${item.kind === 'weekly' ? 'blue' : ''}`}>
+              {item.kind === 'weekly' ? <CheckCircle2 size={21} /> : <AlertTriangle size={21} />}
+            </span>
+            <div className="alert-content">
+              <div className="alert-heading">
+                <h3>
+                  {item.homeId ? (
+                    <a href={`#home/${item.homeId}`}>{content.title}</a>
+                  ) : (
+                    content.title
+                  )}
+                </h3>
+                <Badge tone={item.status === 'sent' ? 'success' : 'warning'}>
+                  {t(labels[item.status] ?? item.status)}
+                </Badge>
+              </div>
+              <time>{date(item.createdAt)}</time>
+              <details>
+                <summary>{t('Notification details')}</summary>
+                <p className="pre-line">{content.body}</p>
+                {item.error && <p className="error-text">{t(item.error)}</p>}
+              </details>
             </div>
-            <time>{date(item.createdAt)}</time>
-            <details>
-              <summary>Szczegóły powiadomienia</summary>
-              <p className="pre-line">{item.body}</p>
-              {item.error && <p className="error-text">{item.error}</p>}
-            </details>
-          </div>
-        </article>
-      ))}
+          </article>
+        );
+      })}
     </div>
   );
 }

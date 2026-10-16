@@ -29,9 +29,12 @@ export const estimationSchema = z
       v.enabled &&
       (!v.ratedPowerKw || !v.heatingCode || !v.onValues.length || !v.offValues.length)
     )
-      ctx.addIssue({ code: 'custom', message: 'Podaj moc, pole oraz wartości grzania i postoju.' });
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter the power, field, and heating and idle values.',
+      });
     if (v.onValues.some((on) => v.offValues.some((off) => off === on)))
-      ctx.addIssue({ code: 'custom', message: 'Wartości grzania i postoju muszą być rozłączne.' });
+      ctx.addIssue({ code: 'custom', message: 'Heating and idle values must not overlap.' });
   });
 type Row = Record<string, any>;
 const round = (value: number) => Math.round(value * 1e6) / 1e6;

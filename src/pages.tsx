@@ -22,6 +22,8 @@ import type {
 } from '../shared/types';
 import { api, useApi } from './api';
 import { EstimationForm } from './EstimationForm';
+import { useI18n } from './i18n';
+import { messages } from './locales/pages';
 import {
   AlertList,
   Badge,
@@ -29,18 +31,15 @@ import {
   Empty,
   EnergyChart,
   EnergyBreakdown,
-  energyNumber,
   Loading,
   Notice,
   PageTitle,
   Range,
   SectionTitle,
-  date,
-  number,
-  percent,
 } from './components';
 
 function RulesForm({ home, onSaved }: { home: HomeDetail; onSaved: () => void }) {
+  const { t } = useI18n(messages);
   const [rules, setRules] = useState<Rules>(home.rules),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
@@ -65,20 +64,23 @@ function RulesForm({ home, onSaved }: { home: HomeDetail; onSaved: () => void })
   }
   return (
     <form className="panel rules-form" onSubmit={save}>
-      <SectionTitle title="Reguły powiadomień" subtitle="Ustawienia tylko dla tego mieszkania">
+      <SectionTitle
+        title={t('Notification rules')}
+        subtitle={t('Settings for this apartment only')}
+      >
         <Settings2 size={21} />
       </SectionTitle>
-      {error && <Notice tone="error">{error}</Notice>}
+      {error && <Notice tone="error">{t(error)}</Notice>}
       <div className="rules-grid">
         <div>
           <label>
-            Dzienny próg energii <span className="field-unit">kWh</span>
+            {t('Daily energy threshold')} <span className="field-unit">kWh</span>
             <input
               type="number"
               min="0.1"
               max="100000"
               step="0.1"
-              placeholder="Brak progu"
+              placeholder={t('No threshold')}
               value={rules.dailyLimit ?? ''}
               onChange={(e) =>
                 change({ dailyLimit: e.target.value === '' ? null : Number(e.target.value) })
@@ -86,7 +88,9 @@ function RulesForm({ home, onSaved }: { home: HomeDetail; onSaved: () => void })
             />
           </label>
           <p className="field-help">
-            E-mail po przekroczeniu progu, najwyżej raz dziennie. Puste pole wyłącza ten alert.
+            {t(
+              'An email is sent when the threshold is exceeded, at most once a day. Leave blank to disable this alert.',
+            )}
           </p>
         </div>
         <div>
@@ -96,18 +100,19 @@ function RulesForm({ home, onSaved }: { home: HomeDetail; onSaved: () => void })
               checked={rules.anomalyEnabled}
               onChange={(e) => change({ anomalyEnabled: e.target.checked })}
             />
-            Wykrywaj nietypowe zużycie
+            {t('Detect unusual usage')}
           </label>
           <p className="field-help">
-            Porównanie z tą samą porą wcześniejszych dni. Wymaga przynajmniej 7 dni z
-            wystarczającymi danymi.
+            {t(
+              'Compares usage at the same time on previous days. Requires at least 7 days with sufficient data.',
+            )}
           </p>
         </div>
       </div>
       <fieldset disabled={!rules.anomalyEnabled} className="anomaly-fields">
-        <legend>Warunki wykrywania anomalii</legend>
+        <legend>{t('Anomaly detection conditions')}</legend>
         <label>
-          Okno porównania (dni)
+          {t('Comparison window (days)')}
           <input
             type="number"
             min="7"
@@ -119,7 +124,7 @@ function RulesForm({ home, onSaved }: { home: HomeDetail; onSaved: () => void })
           />
         </label>
         <label>
-          Wzrost względem średniej (%)
+          {t('Increase over average (%)')}
           <input
             type="number"
             min="1"
@@ -130,7 +135,7 @@ function RulesForm({ home, onSaved }: { home: HomeDetail; onSaved: () => void })
           />
         </label>
         <label>
-          Minimalny przyrost (kWh)
+          {t('Minimum increase (kWh)')}
           <input
             type="number"
             min="0.1"
@@ -144,11 +149,11 @@ function RulesForm({ home, onSaved }: { home: HomeDetail; onSaved: () => void })
       </fieldset>
       <div className="form-footer">
         <span role="status" className="saved-message">
-          {saved ? 'Ustawienia zapisane.' : 'Oba warunki wzrostu muszą być spełnione.'}
+          {saved ? t('Settings saved.') : t('Both increase conditions must be met.')}
         </span>
         <button className="button primary" disabled={busy}>
           <Save size={16} />
-          {busy ? 'Zapisywanie…' : 'Zapisz reguły'}
+          {busy ? t('Saving…') : t('Save rules')}
         </button>
       </div>
     </form>
@@ -156,24 +161,31 @@ function RulesForm({ home, onSaved }: { home: HomeDetail; onSaved: () => void })
 }
 
 export function HomePage({ id }: { id: string }) {
+  const { t, number, date, percent, energyNumber } = useI18n(messages);
   const [days, setDays] = useState(14),
     { data: home, error, refresh } = useApi<HomeDetail>(`/homes/${id}?days=${days}`);
-  if (error) return <Notice tone="error">{error}</Notice>;
+  if (error) return <Notice tone="error">{t(error)}</Notice>;
   if (!home) return <Loading />;
   return (
     <>
       <a className="back-link" href="#homes">
         <ArrowLeft size={16} />
-        Mieszkania
+        {t('Apartments')}
       </a>
-      <PageTitle title={home.name} subtitle={`${home.accountLabel} · ${home.deviceCount} urządzeń`}>
+      <PageTitle
+        title={home.name}
+        subtitle={t('{account} · Devices: {count}', {
+          account: home.accountLabel,
+          count: number(home.deviceCount, 0),
+        })}
+      >
         <Badge tone={home.stats.complete ? 'success' : 'warning'}>
-          {home.stats.complete ? 'Aktualne pomiary' : 'Niepełne pomiary'}
+          {home.stats.complete ? t('Current readings') : t('Incomplete readings')}
         </Badge>
       </PageTitle>
       <div className="stats-grid three">
         <div className="stat featured">
-          <span>Zaobserwowane dzisiaj</span>
+          <span>{t('Observed today')}</span>
           <strong>
             {energyNumber(home.stats)} <small>kWh</small>
           </strong>
@@ -181,46 +193,47 @@ export function HomePage({ id }: { id: string }) {
           <Coverage stats={home.stats} />
         </div>
         <div className="stat">
-          <span>Dzienny próg</span>
+          <span>{t('Daily threshold')}</span>
           <strong>
             {number(home.rules.dailyLimit, 1)} <small>kWh</small>
           </strong>
           <p>
             {home.rules.dailyLimit === null
-              ? 'Ustaw próg poniżej'
-              : 'Indywidualny limit mieszkania'}
+              ? t('Set a threshold below')
+              : t('Individual apartment limit')}
           </p>
         </div>
         <div className="stat">
-          <span>Pokrycie pomiarami</span>
+          <span>{t('Reading coverage')}</span>
           <strong>{percent(home.stats.coverage)}</strong>
-          <p>Od północy, dla wybranych urządzeń</p>
+          <p>{t('Since midnight, for selected devices')}</p>
         </div>
       </div>
       {!home.stats.complete && (
         <Notice tone="warning">
-          Suma jest częściowa. Obejmuje pomiary liczników i włączone estymacje. Przerwy w odczytach
-          oraz urządzenia bez źródła energii pozostają brakami danych.
+          {t(
+            'This total is partial. It includes meter readings and enabled estimates. Reading gaps and devices without an energy source remain missing data.',
+          )}
         </Notice>
       )}
       <div className="panel">
-        <SectionTitle title="Historia mieszkania">
+        <SectionTitle title={t('Apartment history')}>
           <Range days={days} setDays={setDays} />
         </SectionTitle>
         <EnergyChart points={home.history} />
       </div>
       <div className="panel">
         <SectionTitle
-          title="Urządzenia"
-          subtitle="Wybierz urządzenie, aby sprawdzić historię i udział w sumie."
+          title={t('Devices')}
+          subtitle={t('Select a device to view its history and contribution to the total.')}
         />
         {home.devices.length ? (
           <div className="device-table">
             <div className="device-row table-head">
-              <span>Urządzenie</span>
-              <span>Pomiar energii</span>
-              <span>Dzisiaj</span>
-              <span>Ostatni odczyt</span>
+              <span>{t('Device')}</span>
+              <span>{t('Energy measurement')}</span>
+              <span>{t('Today')}</span>
+              <span>{t('Last reading')}</span>
               <span />
             </div>
             {home.devices.map((d) => (
@@ -233,10 +246,10 @@ export function HomePage({ id }: { id: string }) {
                     <strong>{d.name}</strong>
                     <small>
                       {!d.included
-                        ? 'Poza sumą mieszkania'
+                        ? t('Excluded from apartment total')
                         : d.fresh
-                          ? 'Online'
-                          : 'Offline lub nieaktualne odczyty'}
+                          ? t('Online')
+                          : t('Offline or stale readings')}
                     </small>
                   </div>
                 </div>
@@ -252,13 +265,13 @@ export function HomePage({ id }: { id: string }) {
                   >
                     {d.energySource === 'estimated'
                       ? d.heatingState === 'unknown'
-                        ? 'Estymacja: brak sygnału'
-                        : 'Estymacja kWh'
+                        ? t('Estimate: no signal')
+                        : t('Estimated kWh')
                       : d.energyKind === 'cumulative'
-                        ? 'Licznik kWh'
+                        ? t('kWh meter')
                         : d.energyKind === 'incremental'
-                          ? 'Nieobsługiwane raporty'
-                          : 'Brak energii'}
+                          ? t('Unsupported reports')
+                          : t('No energy data')}
                   </Badge>
                 </span>
                 <span className="tabular">
@@ -270,7 +283,9 @@ export function HomePage({ id }: { id: string }) {
             ))}
           </div>
         ) : (
-          <Empty title="Brak urządzeń">Sprawdź połączenie konta i odśwież dane.</Empty>
+          <Empty title={t('No devices')}>
+            {t('Check the account connection and refresh the data.')}
+          </Empty>
         )}
       </div>
       <RulesForm key={home.id} home={home} onSaved={refresh} />
@@ -279,11 +294,12 @@ export function HomePage({ id }: { id: string }) {
 }
 
 export function DevicePage({ id }: { id: string }) {
+  const { t, number, date, percent, energyNumber } = useI18n(messages);
   const [days, setDays] = useState(14),
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState('');
   const { data: device, error, refresh } = useApi<DeviceDetail>(`/devices/${id}?days=${days}`);
-  if (error) return <Notice tone="error">{error}</Notice>;
+  if (error) return <Notice tone="error">{t(error)}</Notice>;
   if (!device) return <Loading />;
   async function toggle(included: boolean) {
     setBusy(true);
@@ -305,60 +321,67 @@ export function DevicePage({ id }: { id: string }) {
       </a>
       <PageTitle
         title={device.name}
-        subtitle={`${device.homeName} · ostatni odczyt chmury: ${date(device.lastSeen)}`}
+        subtitle={t('{home} · last cloud reading: {date}', {
+          home: device.homeName,
+          date: date(device.lastSeen),
+        })}
       >
         <Badge tone={device.fresh ? 'success' : 'warning'}>
-          {device.fresh ? 'Online' : 'Offline lub nieaktualne odczyty'}
+          {device.fresh ? t('Online') : t('Offline or stale readings')}
         </Badge>
       </PageTitle>
-      {notice && <Notice tone="error">{notice}</Notice>}
+      {notice && <Notice tone="error">{t(notice)}</Notice>}
       <div className="stats-grid three">
         <div className="stat featured">
-          <span>Zaobserwowane dzisiaj</span>
+          <span>{t('Observed today')}</span>
           <strong>
             {energyNumber(device.stats)} <small>kWh</small>
           </strong>
           <EnergyBreakdown stats={device.stats} />
-          <p>{percent(device.stats.coverage)} pokrycia czasu</p>
+          <p>{t('{coverage} time coverage', { coverage: percent(device.stats.coverage) })}</p>
         </div>
         <div className="stat">
-          <span>Stan licznika</span>
+          <span>{t('Meter reading')}</span>
           <strong>
             {number(device.counterKwh)} <small>kWh</small>
           </strong>
-          <p>Łączny licznik urządzenia, nie zużycie dobowe</p>
+          <p>{t("The device's cumulative meter, not daily usage")}</p>
         </div>
         <div className="stat">
-          <span>Temperatura bieżąca</span>
+          <span>{t('Current temperature')}</span>
           <strong>
             {number(device.temperature, 1)} <small>°C</small>
           </strong>
           <p>
             {device.temperature === null
-              ? 'Brak odczytu temperatury'
-              : 'Odczyt udostępniony przez urządzenie'}
+              ? t('No temperature reading')
+              : t('Reading provided by the device')}
           </p>
         </div>
       </div>
       {device.energySource === 'missing' && (
         <Notice tone="warning">
           {device.energyKind === 'incremental'
-            ? 'To urządzenie udostępnia przyrostowe raporty energii. Okresowe odpytywanie nie pozwala ich bezpiecznie sumować.'
-            : 'Obecne połączenie Tuya nie udostępnia licznika energii tego urządzenia.'}{' '}
-          Możesz skonfigurować estymację poniżej, jeśli dostępny jest sygnał aktywnego grzania.
+            ? t(
+                'This device provides incremental energy reports. Periodic polling cannot safely add them up.',
+              )
+            : t(
+                'The current Tuya connection does not provide an energy meter for this device.',
+              )}{' '}
+          {t('You can configure estimation below if an active heating signal is available.')}
         </Notice>
       )}
       <EstimationForm key={device.id} device={device} onSaved={refresh} />
       <div className="panel">
-        <SectionTitle title="Historia urządzenia">
+        <SectionTitle title={t('Device history')}>
           <Range days={days} setDays={setDays} />
         </SectionTitle>
         <EnergyChart points={device.history} />
       </div>
       <div className="panel">
         <SectionTitle
-          title="Udział w monitorowaniu"
-          subtitle="Włącz urządzenia, które odpowiadają za ogrzewanie mieszkania."
+          title={t('Monitoring participation')}
+          subtitle={t('Include devices that heat the apartment.')}
         />
         <label className="check-label">
           <input
@@ -367,11 +390,12 @@ export function DevicePage({ id }: { id: string }) {
             disabled={busy}
             onChange={(e) => void toggle(e.target.checked)}
           />
-          Uwzględniaj w sumie mieszkania i regułach alertów
+          {t('Include in apartment total and alert rules')}
         </label>
         <p className="field-help">
-          Urządzenie bez pomiaru będzie oznaczone jako brakująca część sumy. Zmiana wyboru przelicza
-          również historię dla bieżącego zestawu urządzeń.
+          {t(
+            'A device without readings is marked as a missing part of the total. Changing the selection also recalculates history for the current set of devices.',
+          )}
         </p>
       </div>
     </>
@@ -379,6 +403,7 @@ export function DevicePage({ id }: { id: string }) {
 }
 
 export function AccountsPage() {
+  const { t, number, date } = useI18n(messages);
   const { data, error, refresh } = useApi<AccountView[]>('/accounts');
   const [form, setForm] = useState(false),
     [label, setLabel] = useState(''),
@@ -417,7 +442,7 @@ export function AccountsPage() {
       await api(`/accounts/connect/${flow!.id}/confirm`, 'POST', {});
       setFlow(null);
       setForm(false);
-      setMessage('Konto połączone. Pobieramy domy i urządzenia — pojawią się po synchronizacji.');
+      setMessage('Account connected. Apartments and devices will appear after synchronization.');
       refresh();
     } catch (e) {
       setFailure((e as Error).message);
@@ -428,45 +453,45 @@ export function AccountsPage() {
   return (
     <>
       <PageTitle
-        title="Połączone konta"
-        subtitle="Wszystkie konta Tuya i Smart Life w jednym panelu."
+        title={t('Connected accounts')}
+        subtitle={t('All your Tuya and Smart Life accounts in one dashboard.')}
       >
         <button className="button primary" onClick={() => open()}>
           <Plus size={18} />
-          Dodaj konto
+          {t('Add account')}
         </button>
       </PageTitle>
-      {error && <Notice tone="error">{error}</Notice>}
-      {message && <Notice>{message}</Notice>}
+      {error && <Notice tone="error">{t(error)}</Notice>}
+      {message && <Notice>{t(message)}</Notice>}
       {form && (
         <section className="panel connect-panel">
           <SectionTitle
-            title={accountId ? 'Połącz konto ponownie' : 'Dodaj konto Tuya / Smart Life'}
+            title={accountId ? t('Reconnect account') : t('Add a Tuya / Smart Life account')}
           >
             <button
               className="button secondary compact"
               disabled={busy}
               onClick={() => setForm(false)}
             >
-              Zamknij
+              {t('Close')}
             </button>
           </SectionTitle>
-          {failure && <Notice tone="error">{failure}</Notice>}
+          {failure && <Notice tone="error">{t(failure)}</Notice>}
           {!flow ? (
             <form onSubmit={start}>
               <div className="form-two">
                 <label>
-                  Nazwa konta
+                  {t('Account name')}
                   <input
                     value={label}
                     onChange={(e) => setLabel(e.target.value)}
-                    placeholder="np. Mieszkania"
+                    placeholder={t('e.g. Apartments')}
                     required
                     maxLength={80}
                   />
                 </label>
                 <label>
-                  Kod użytkownika
+                  {t('User code')}
                   <input
                     type="password"
                     value={code}
@@ -478,37 +503,42 @@ export function AccountsPage() {
                 </label>
               </div>
               <p className="field-help">
-                Kod znajdziesz w aplikacji: Ja → Ustawienia → Konto i bezpieczeństwo → Kod
-                użytkownika.
+                {t('Find the code in the app: Me → Settings → Account and Security → User Code.')}
               </p>
               <button className="button primary" disabled={busy}>
-                {busy ? 'Generowanie…' : 'Wyświetl kod QR'}
+                {busy ? t('Generating…') : t('Show QR code')}
               </button>
             </form>
           ) : (
             <div className="qr-layout">
-              <img src={flow.image} alt="Kod QR połączenia konta Tuya" width={260} height={260} />
+              <img
+                src={flow.image}
+                alt={t('QR code for connecting a Tuya account')}
+                width={260}
+                height={260}
+              />
               <div>
-                <h3>Zatwierdź połączenie w telefonie</h3>
+                <h3>{t('Approve the connection on your phone')}</h3>
                 <ol>
-                  <li>Otwórz Tuya lub Smart Life na właściwym koncie.</li>
-                  <li>Wybierz + → Skanuj i zeskanuj kod.</li>
-                  <li>Zatwierdź połączenie, a następnie sprawdź je poniżej.</li>
+                  <li>{t('Open Tuya or Smart Life with the correct account.')}</li>
+                  <li>{t('Choose + → Scan and scan the code.')}</li>
+                  <li>{t('Approve the connection, then check it below.')}</li>
                 </ol>
                 <p className="field-help">
-                  Ekran zgody może pokazać nazwę Home Assistant — korzystamy z tego samego
-                  mechanizmu logowania. QR wygasa po 5 minutach.
+                  {t(
+                    'The consent screen may show Home Assistant because we use the same sign-in mechanism. The QR code expires after 5 minutes.',
+                  )}
                 </p>
                 <div className="button-row">
                   <button className="button primary" disabled={busy} onClick={confirm}>
-                    {busy ? 'Sprawdzanie…' : 'Zatwierdziłem — sprawdź'}
+                    {busy ? t('Checking…') : t("I've approved it — check")}
                   </button>
                   <button
                     className="button secondary"
                     disabled={busy}
                     onClick={() => setFlow(null)}
                   >
-                    Nowy QR
+                    {t('New QR code')}
                   </button>
                 </div>
               </div>
@@ -528,25 +558,28 @@ export function AccountsPage() {
                 </span>
                 <Badge tone={a.error ? 'danger' : a.healthy ? 'success' : 'warning'}>
                   {a.error
-                    ? 'Wymaga uwagi'
+                    ? t('Needs attention')
                     : a.healthy
-                      ? 'Połączone'
+                      ? t('Connected')
                       : a.lastSync
-                        ? 'Nieaktualne odczyty'
-                        : 'Pierwszy odczyt'}
+                        ? t('Stale readings')
+                        : t('First reading pending')}
                 </Badge>
               </div>
               <h2>{a.label}</h2>
               <p>
-                {a.homeCount} domów · {a.deviceCount} urządzeń
+                {t('Apartments: {homes} · Devices: {devices}', {
+                  homes: number(a.homeCount, 0),
+                  devices: number(a.deviceCount, 0),
+                })}
               </p>
               <div className="account-sync">
                 <Clock3 size={15} />
                 {date(a.lastSync)}
               </div>
-              {a.error && <Notice tone="error">{a.error}</Notice>}
+              {a.error && <Notice tone="error">{t(a.error)}</Notice>}
               <button className="button secondary full" onClick={() => open(a)}>
-                Połącz ponownie
+                {t('Reconnect')}
               </button>
             </article>
           ))}
@@ -554,8 +587,10 @@ export function AccountsPage() {
       ) : (
         !form && (
           <div className="panel">
-            <Empty title="Jeszcze nie połączono kont">
-              Dodaj konto, używając kodu użytkownika i QR. Nie potrzebujesz hasła do konta Tuya.
+            <Empty title={t('No accounts connected yet')}>
+              {t(
+                'Add an account using its user code and a QR code. You do not need your Tuya account password.',
+              )}
             </Empty>
           </div>
         )
@@ -563,8 +598,9 @@ export function AccountsPage() {
       <div className="inline-note">
         <ShieldCheck size={18} />
         <p>
-          Dane połączenia są szyfrowane i pozostają na Twoim serwerze. Aplikacja wyłącznie odczytuje
-          urządzenia.
+          {t(
+            'Connection credentials are encrypted and stay on your server. The application only reads device data.',
+          )}
         </p>
       </div>
     </>
@@ -572,117 +608,129 @@ export function AccountsPage() {
 }
 
 export function NotificationsPage() {
+  const { t } = useI18n(messages);
   const { data, error } = useApi<NotificationView[]>('/notifications');
   const settings = useApi<SettingsView>('/settings');
   return (
     <>
       <PageTitle
-        title="Powiadomienia"
-        subtitle="Przekroczenia progów, nietypowe zużycie i cotygodniowe podsumowania."
+        title={t('Notifications')}
+        subtitle={t('Threshold alerts, unusual usage, and weekly summaries.')}
       />
       {settings.data && !settings.data.emailConfigured && (
         <Notice tone="warning">
-          Wysyłka e-maili nie jest skonfigurowana. Zdarzenia będą zapisywane tutaj.{' '}
-          <a href="#settings">Zobacz ustawienia wysyłki.</a>
+          {t('Email delivery is not configured. Events will be recorded here.')}{' '}
+          <a href="#settings">{t('View email settings.')}</a>
         </Notice>
       )}
-      {error && <Notice tone="error">{error}</Notice>}
+      {error && <Notice tone="error">{t(error)}</Notice>}
       <div className="panel">{data ? <AlertList items={data} /> : <Loading />}</div>
     </>
   );
 }
 
 export function SettingsPage() {
+  const { t, number } = useI18n(messages);
   const { data, error } = useApi<SettingsView>('/settings');
-  if (error) return <Notice tone="error">{error}</Notice>;
+  if (error) return <Notice tone="error">{t(error)}</Notice>;
   if (!data) return <Loading />;
   return (
     <>
       <PageTitle
-        title="Ustawienia"
-        subtitle="Konfiguracja Twojej instancji i sposób działania monitorowania."
+        title={t('Settings')}
+        subtitle={t('Your instance configuration and how monitoring works.')}
       />
       <div className="panel">
-        <SectionTitle title="Powiadomienia e-mail" subtitle="Dostarczane przez Resend">
+        <SectionTitle title={t('Email notifications')} subtitle={t('Delivered by Resend')}>
           <Mail size={23} />
         </SectionTitle>
         <Badge tone={data.emailConfigured ? 'success' : 'warning'}>
-          {data.emailConfigured ? 'Wysyłka skonfigurowana' : 'Wymaga konfiguracji'}
+          {data.emailConfigured ? t('Email delivery configured') : t('Configuration required')}
         </Badge>
         <dl className="settings-list">
           <div>
-            <dt>Nadawca</dt>
-            <dd>{data.emailFrom || 'Nie ustawiono'}</dd>
+            <dt>{t('Sender')}</dt>
+            <dd>{data.emailFrom || t('Not set')}</dd>
           </div>
           <div>
-            <dt>Odbiorca</dt>
-            <dd>{data.emailTo || 'Nie ustawiono'}</dd>
+            <dt>{t('Recipient')}</dt>
+            <dd>{data.emailTo || t('Not set')}</dd>
           </div>
           <div>
-            <dt>Podsumowanie tygodnia</dt>
-            <dd>Poniedziałek, po 08:00</dd>
+            <dt>{t('Weekly summary')}</dt>
+            <dd>{t('Monday, after 08:00')}</dd>
           </div>
         </dl>
         {!data.emailConfigured && (
           <Notice>
-            Ustaw na serwerze <code>RESEND_API_KEY</code>, <code>EMAIL_FROM</code> (zweryfikowana
-            domena) i <code>EMAIL_TO</code>, a następnie uruchom aplikację ponownie. Klucz nie jest
-            przesyłany do przeglądarki.
+            {t(
+              'Set RESEND_API_KEY, EMAIL_FROM (a verified domain), and EMAIL_TO on the server, then restart the application. The key is never sent to the browser.',
+            )}
           </Notice>
         )}
         <p className="field-help">
-          Próg i anomalia: najwyżej jedno powiadomienie każdego rodzaju na mieszkanie dziennie.
-          Podsumowanie wysyłamy także wtedy, gdy nie wystąpiły alerty.
+          {t(
+            'Threshold and anomaly alerts: at most one notification of each type per apartment per day. The summary is sent even when there were no alerts.',
+          )}
         </p>
       </div>
       <div className="panel">
-        <SectionTitle title="Monitorowanie" />
+        <SectionTitle title={t('Monitoring')} />
         <dl className="settings-list">
           <div>
-            <dt>Strefa czasowa</dt>
+            <dt>{t('Time zone')}</dt>
             <dd>{data.timezone}</dd>
           </div>
           <div>
-            <dt>Liczniki i lista urządzeń</dt>
-            <dd>Co {data.pollSeconds / 60} minut</dd>
+            <dt>{t('Meters and device list')}</dt>
+            <dd>{t('Every {minutes} minutes', { minutes: number(data.pollSeconds / 60, 0) })}</dd>
           </div>
           <div>
-            <dt>Stany grzania</dt>
-            <dd>Co {data.statusPollSeconds} sekund</dd>
+            <dt>{t('Heating states')}</dt>
+            <dd>{t('Every {seconds} seconds', { seconds: number(data.statusPollSeconds, 0) })}</dd>
           </div>
           <div>
-            <dt>Adres aplikacji</dt>
+            <dt>{t('Application URL')}</dt>
             <dd>{data.origin}</dd>
           </div>
           <div>
-            <dt>Dostęp</dt>
-            <dd>Jeden właściciel · hasło · brak rejestracji</dd>
+            <dt>{t('Access')}</dt>
+            <dd>{t('One owner · password · no registration')}</dd>
           </div>
         </dl>
       </div>
+      <div className="panel">
+        <SectionTitle title={t('Interface language')} />
+        <p>
+          {t('Your language choice is saved in this browser. Emails are always sent in English.')}
+        </p>
+      </div>
       <div className="panel prose">
-        <SectionTitle title="Jak czytać wyniki" />
+        <SectionTitle title={t('How to read the results')} />
         <p>
-          Zużycie liczymy z przyrostów licznika. Pierwszy odczyt wyznacza punkt początkowy. Krótkie
-          przedziały na granicy dni dzielimy proporcjonalnie, więc dobowe wartości są przybliżeniem.
+          {t(
+            'Usage is calculated from meter increases. The first reading establishes a starting point. Short intervals across day boundaries are split proportionally, so daily values are approximate.',
+          )}
         </p>
         <p>
-          Estymacja (≈) to zadana moc w kW × zaobserwowany czas grzania w godzinach. Włączysz ją w
-          szczegółach urządzenia. Suma rozdziela pomiar licznika i szacunek; nie służy rozliczeniom.
+          {t(
+            'An estimate (≈) is the configured power in kW × observed heating time in hours. Enable it in device details. Totals separate meter readings from estimates; they are not intended for billing.',
+          )}
         </p>
         <p>
-          Brak źródła energii, urządzenie offline i reset licznika pozostawiają lukę. Granica
-          przerwy to 15 minut dla liczników i 3 minuty dla estymacji. Pokrycie mówi, dla jakiej
-          części czasu i wybranych urządzeń mamy pomiar. Wartość „—” oznacza brak danych.
+          {t(
+            'A missing energy source, offline device, or meter reset leaves a gap. The gap limit is 15 minutes for meters and 3 minutes for estimates. Coverage shows how much of the time and selected devices have readings. A dash (—) means no data.',
+          )}
         </p>
         <p>
-          Alert dzienny może dotyczyć częściowej sumy — wiadomość to zaznaczy. Anomalia wymaga
-          przynajmniej 7 porównywalnych dni z co najmniej 95% pokrycia dla każdego porównywanego
-          urządzenia. Zmiana mocy lub mapowania stanu wymaga nowej historii do porównań.
+          {t(
+            'A daily alert may concern a partial total; the message will say so. An anomaly requires at least 7 comparable days with at least 95% coverage for each compared device. Changing power or state mapping requires new comparison history.',
+          )}
         </p>
         <p>
-          Progi i wybór urządzeń ustawisz osobno w każdym mieszkaniu. Historia z aplikacji mobilnej
-          Tuya nie jest importowana.
+          {t(
+            'Set thresholds and device selection separately for each apartment. History from the Tuya mobile app is not imported.',
+          )}
         </p>
       </div>
     </>

@@ -253,3 +253,19 @@ test('a failed inventory refresh preserves minute relay polling and retries inve
     f.db.close();
   }
 });
+
+test('collector failures store a safe English account error', async () => {
+  const f = fixture(async () => {
+    throw new Error('secret upstream failure');
+  });
+  try {
+    await f.collector.sync();
+    assert.equal(
+      (f.db.prepare('SELECT error FROM accounts').get() as any).error,
+      'Could not read the account. Sync again; if the problem persists, reconnect the account.',
+    );
+  } finally {
+    await f.collector.stop();
+    f.db.close();
+  }
+});

@@ -1,9 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { openDatabase } from '../server/db.js';
-import { ingestSnapshot, dayBounds } from '../server/energy.js';
+import { ingestSnapshot, dayBounds, accounts, notifications } from '../server/energy.js';
 import { evaluateNotifications, deliverPending } from '../server/notifications.js';
 import type { Config } from '../server/config.js';
+import { localizeNotification } from '../shared/notificationMessages.js';
+import { localizeSystemMessage } from '../shared/systemMessages.js';
 
 const now = Date.parse('2026-10-16T10:00:00Z'); // Noon Warsaw.
 const config: Config = {
@@ -98,8 +100,8 @@ test('a reading after midnight can complete yesterday and trigger its daily thre
   const events = f.db.prepare("SELECT * FROM notifications WHERE kind='threshold'").all() as any[];
   assert.equal(events.length, 1);
   assert.equal(events[0].id, `threshold/${f.home}/2026-10-16`);
-  assert.match(events[0].body, /10,10 kWh/);
-  assert.match(events[0].body, /Dzień: 2026-10-16/);
+  assert.match(events[0].body, /10\.10 kWh/);
+  assert.match(events[0].body, /Day: 2026-10-16/);
   f.db.close();
 });
 
@@ -137,7 +139,14 @@ test('anomaly compares the same portion of the previous seven complete days', ()
   evaluateNotifications(f.db, now);
   const events = f.db.prepare("SELECT * FROM notifications WHERE kind='anomaly'").all() as any[];
   assert.equal(events.length, 1);
-  assert.match(events[0].body, /4[,.]00 kWh/);
+  assert.equal(events[0].title, 'Unusual usage: Apartment');
+  assert.match(events[0].body, /Average by the same time: 4\.00 kWh \(7 comparable days\)/);
+  const polish = localizeNotification(
+    notifications(f.db).find((event) => event.kind === 'anomaly')!,
+    'pl',
+  );
+  assert.equal(polish.title, 'Nietypowe zużycie: Apartment');
+  assert.match(polish.body, /Średnia do tej samej pory: 4,00 kWh \(7 porównywalnych dni\)/);
   f.db.close();
 });
 
@@ -220,9 +229,16 @@ test('weekly summary exists even with no alerts, has health and comparison, and 
     .all() as any[];
   assert.equal(rows.length, 1);
   assert.match(rows[0].body, /Apartment/);
-  assert.match(rows[0].body, /Apartment.*14,00 kWh/);
-  assert.match(rows[0].body, /poprzedni tydzień: 7,00 kWh/i);
-  assert.match(rows[0].body, /nieaktualne|brak|offline/i);
+  assert.match(rows[0].body, /Apartment.*14\.00 kWh/);
+  assert.match(rows[0].body, /previous week: 7\.00 kWh/i);
+  assert.match(rows[0].body, /stale|missing|offline/i);
+  const polish = localizeNotification(
+    notifications(f.db).find((event) => event.id === 'weekly/2026-10-12')!,
+    'pl',
+  );
+  assert.equal(polish.title, 'Energia: podsumowanie tygodnia 2026-10-12');
+  assert.match(polish.body, /Poprzedni tydzień: 7,00 kWh/);
+  assert.match(polish.body, /Account: odczyty nieaktualne/);
   f.db.close();
 });
 
@@ -252,6 +268,10 @@ test('delivery retries preserve recipient, payload and idempotency key across ch
   );
   assert.equal((f.db.prepare('SELECT status FROM notifications').get() as any).status, 'sent');
   assert.deepEqual(requests[0], requests[1]);
+  const mail = JSON.parse(requests[0].body);
+  assert.equal(mail.subject, 'Energy threshold: Apartment');
+  assert.match(mail.text, /Observed usage: 14\.00 kWh/);
+  assert.match(mail.text, /Open dashboard: https:\/\/energy.example/);
   assert.match(requests[0].body, /owner@example.com/);
   assert.match(requests[0].body, /https:\/\/energy.example/);
   await deliverPending(f.db, config, now + 1200000, transport);
@@ -290,16 +310,16 @@ test('thresholds and weekly summaries label estimated contributions and split mi
   f.db.prepare('UPDATE homes SET daily_limit=13,anomaly_enabled=0').run();
   evaluateNotifications(f.db, now);
   const alert = f.db.prepare("SELECT body FROM notifications WHERE kind='threshold'").get() as any;
-  assert.match(alert.body, /≈ 14,00 kWh/);
-  assert.match(alert.body, /pomiar: 10,00 kWh/i);
-  assert.match(alert.body, /estymacja: 4,00 kWh/i);
-  assert.match(alert.body, /Heater: ≈ 14,00 kWh/);
+  assert.match(alert.body, /≈ 14\.00 kWh/);
+  assert.match(alert.body, /measured: 10\.00 kWh/i);
+  assert.match(alert.body, /estimated: 4\.00 kWh/i);
+  assert.match(alert.body, /Heater: ≈ 14\.00 kWh/);
   evaluateNotifications(f.db, Date.parse('2026-10-19T06:05Z'));
   const weekly = f.db
     .prepare("SELECT body FROM notifications WHERE id='weekly/2026-10-12'")
     .get() as any;
-  assert.match(weekly.body, /≈ 14,00 kWh/);
-  assert.match(weekly.body, /estymacja: 4,00 kWh/i);
+  assert.match(weekly.body, /≈ 14\.00 kWh/);
+  assert.match(weekly.body, /estimated: 4\.00 kWh/i);
   f.db.close();
 });
 
@@ -338,4 +358,141 @@ test('runtime anomalies require history from the same source and configuration, 
   evaluateNotifications(f.db, now);
   assert.equal(f.db.prepare("SELECT id FROM notifications WHERE kind='anomaly'").all().length, 0);
   f.db.close();
+});
+
+test('new notifications expose English mail content and Polish display content without translating user names', () => {
+  const f = fixture();
+  try {
+    f.interval('2026-10-16', 14.25, now);
+    f.db
+      .prepare('UPDATE homes SET name=?,daily_limit=13,anomaly_enabled=0')
+      .run('Mieszkanie: Home');
+    f.db.prepare('UPDATE devices SET name=?').run('Pomiar: Heater');
+    evaluateNotifications(f.db, now);
+    const alert = notifications(f.db).find((event) => event.kind === 'threshold')!;
+    assert.equal(alert.title, 'Energy threshold: Mieszkanie: Home');
+    assert.match(alert.body, /Observed usage: 14\.25 kWh/);
+    assert.match(
+      alert.body,
+      /• Pomiar: Heater: 14\.25 kWh \(Measured: 14\.25 kWh; estimated: no data\.\)/,
+    );
+    assert.equal(alert.translations?.pl.title, 'Próg energii: Mieszkanie: Home');
+    assert.match(alert.translations!.pl.body, /Zaobserwowane zużycie: 14,25 kWh/);
+    assert.match(alert.translations!.pl.body, /• Pomiar: Heater: 14,25 kWh/);
+    assert.equal(localizeNotification(alert, 'pl').title, 'Próg energii: Mieszkanie: Home');
+    assert.equal(localizeNotification(alert, 'en').title, 'Energy threshold: Mieszkanie: Home');
+    const original = { ...alert.translations!.pl };
+    f.db.prepare('UPDATE homes SET name=?').run('renamed');
+    evaluateNotifications(f.db, now + 1000);
+    assert.deepEqual(
+      notifications(f.db).find((event) => event.kind === 'threshold')!.translations?.pl,
+      original,
+    );
+  } finally {
+    f.db.close();
+  }
+});
+
+test('known persisted Polish errors are canonicalized for API and English weekly mail without rewriting stored history', () => {
+  const f = fixture();
+  try {
+    const legacy =
+      'Nie udało się odczytać konta. Ponów synchronizację; jeśli problem trwa, połącz konto ponownie.';
+    f.db.prepare('UPDATE accounts SET error=?').run(legacy);
+    assert.equal(
+      accounts(f.db, now)[0].error,
+      'Could not read the account. Sync again; if the problem persists, reconnect the account.',
+    );
+    evaluateNotifications(f.db, now);
+    const weekly = notifications(f.db).find((event) => event.kind === 'weekly')!;
+    assert.match(weekly.body, /Account: Could not read the account\./);
+    assert.match(weekly.translations!.pl.body, /Account: Nie udało się odczytać konta\./);
+    assert.equal((f.db.prepare('SELECT error FROM accounts').get() as any).error, legacy);
+    f.db.prepare('UPDATE accounts SET error=?').run('Custom error: nieznany');
+    assert.equal(accounts(f.db, now)[0].error, 'Custom error: nieznany');
+  } finally {
+    f.db.close();
+  }
+});
+
+test('legacy attempted payloads remain byte-for-byte unchanged while retry status is English', async () => {
+  const f = fixture();
+  try {
+    const payload =
+      '{"from":"old@example.com","to":["old-to@example.com"],"subject":"Próg energii: Stare","text":"Otwórz panel: https://old.example"}';
+    f.db
+      .prepare(
+        "INSERT INTO notifications(id,kind,title,body,created_at,status,first_attempt,payload) VALUES('legacy','threshold','Próg energii: Stare','Stara treść',?,'retry',?,?)",
+      )
+      .run(now, now, payload);
+    let delivered: string | undefined;
+    await deliverPending(f.db, config, now, async (_url, options) => {
+      delivered = options!.body as string;
+      return new Response('{}', { status: 500 });
+    });
+    assert.equal(delivered, payload);
+    const legacy = notifications(f.db).find((event) => event.id === 'legacy')!;
+    assert.equal(legacy.title, 'Próg energii: Stare');
+    assert.equal(legacy.body, 'Stara treść');
+    assert.equal(legacy.translations, undefined);
+    assert.deepEqual(localizeNotification(legacy, 'en'), {
+      title: 'Próg energii: Stare',
+      body: 'Stara treść',
+    });
+    assert.deepEqual(localizeNotification(legacy, 'pl'), {
+      title: 'Próg energii: Stare',
+      body: 'Stara treść',
+    });
+    assert.equal(
+      legacy.error,
+      'Delivery was not confirmed. We will retry with the same identifier.',
+    );
+  } finally {
+    f.db.close();
+  }
+});
+
+test('system error localization recognizes exact legacy and parameterized errors and preserves unknown content', () => {
+  for (const source of [
+    'Resend rejected the message (HTTP 403). Check the sender and API key configuration.',
+    'Resend odrzucił wiadomość (HTTP 403). Sprawdź konfigurację nadawcy i klucza.',
+  ]) {
+    assert.equal(
+      localizeSystemMessage(source, 'en'),
+      'Resend rejected the message (HTTP 403). Check the sender and API key configuration.',
+    );
+    assert.equal(
+      localizeSystemMessage(source, 'pl'),
+      'Resend odrzucił wiadomość (HTTP 403). Sprawdź konfigurację nadawcy i klucza.',
+    );
+  }
+  assert.equal(localizeSystemMessage('Incorrect password.', 'pl'), 'Nieprawidłowe hasło.');
+  assert.equal(localizeSystemMessage('Nieprawidłowe hasło.', 'en'), 'Incorrect password.');
+  assert.equal(
+    localizeSystemMessage('User message: Nieprawidłowe hasło.', 'en'),
+    'User message: Nieprawidłowe hasło.',
+  );
+  assert.equal(localizeSystemMessage('Unknown provider error', 'pl'), 'Unknown provider error');
+});
+
+test('evaluating an existing historical alert does not attach a translation from newer readings', () => {
+  const f = fixture();
+  try {
+    f.interval('2026-10-16', 14, now);
+    f.db.prepare('UPDATE homes SET daily_limit=13,anomaly_enabled=0').run();
+    const id = `threshold/${f.home}/2026-10-16`;
+    f.db
+      .prepare(
+        'INSERT INTO notifications(id,home_id,kind,title,body,created_at) VALUES(?,?,?,?,?,?)',
+      )
+      .run(id, f.home, 'threshold', 'Historyczny tytuł', 'Historyczna treść', now - 1000);
+    evaluateNotifications(f.db, now);
+    const historical = notifications(f.db).find((event) => event.id === id)!;
+    assert.equal(historical.title, 'Historyczny tytuł');
+    assert.equal(historical.body, 'Historyczna treść');
+    assert.equal(historical.translations, undefined);
+    assert.equal((f.db.prepare('PRAGMA user_version').get() as any).user_version, 2);
+  } finally {
+    f.db.close();
+  }
 });

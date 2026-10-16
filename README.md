@@ -5,7 +5,8 @@
 A self-hosted web app for monitoring heating energy consumption across multiple
 Tuya and Smart Life accounts, homes, and devices.
 
-The first application is implemented: a Polish dashboard with password login,
+The application includes an English-default dashboard with an English/Polish
+language switch, password login,
 apartment/device drill-down, history, individual thresholds, anomaly detection
 and Resend notifications. Energy support depends on what each device exposes
 through Tuya's sharing API. Unsupported devices remain visible as missing data.
@@ -32,9 +33,28 @@ per database. `/healthz` checks process health; connection/measurement health
 is visible after login. The container runs as UID/GID 1000. A bind-mounted
 data directory must be writable by that user.
 
+## Language
+
+English is the default, including on the sign-in screen. Use the **Language**
+selector to switch between **English** and **Polski** before or after signing in.
+The selection is saved in this browser and retained after a reload or sign-out;
+other browsers start in English. If browser storage is blocked, the selection
+still works for the current page session. Browser language is not used to change
+the default automatically.
+
+Interface text, errors, dates and numbers follow the selected language. Apartment
+and device names, account labels, and raw Tuya field names/values stay as supplied.
+The monitoring calendar and weekly schedule always use **Europe/Warsaw**.
+
+New automatic emails are in **English**, independently of the interface language.
+New notifications can be displayed in either interface language. Notifications
+created before language support retain their original text; already attempted
+email payloads remain unchanged so delivery retries keep their idempotency guarantee.
+Documentation uses the English interface labels.
+
 ## Connect and configure
 
-- Open **Połączone konta**, choose **Dodaj konto**, and enter the account's
+- Open **Connected accounts**, choose **Add account**, and enter the account's
   User Code from Tuya/Smart Life → Me → Settings → Account and Security.
 - Scan the QR with the correct mobile account. The consent screen can say
   **Home Assistant**, because this compatibility connector uses Tuya's
@@ -55,14 +75,14 @@ inventory attempts retry on the five-minute cadence without suppressing relay
 polls. Email delivery has its own serialized job so Resend delays do not block
 state collection.
 No local network access to the apartments is needed. Cloud errors are displayed;
-expired authorization can be renewed with **Połącz ponownie**. Credentials are
+expired authorization can be renewed with **Reconnect**. Credentials are
 encrypted with AES-256-GCM before storage and never returned to the browser.
 
 ## Thermostat runtime estimates
 
-In **Mieszkania → device → Estymacja z czasu grzania**:
+In **Apartments → device → Heating runtime estimation**:
 
-1. Expand **Dostępne pola i ostatnie stany**. Confirm a field that actually reports
+1. Expand **Available fields and latest states**. Confirm a field that actually reports
    the heating relay, such as `work_state`. A general `switch`, selected mode or
    temperature setpoint is **not** evidence that the heater is drawing power.
 2. Set the total rated **heating circuit power in kW** (for example 1200 W =
@@ -131,7 +151,7 @@ history remains in SQLite `heating_observations` and `intervals`.
 
 Configure `RESEND_API_KEY`, `EMAIL_FROM` (on a domain verified with Resend) and
 `EMAIL_TO`, then restart. With no email configuration, detected events remain
-visible in **Powiadomienia** and nothing is sent.
+visible in **Notifications** and nothing is sent.
 
 Daily threshold alerts evaluate after collection and are limited to one per
 apartment per Warsaw date. Partial sums may trigger a threshold and are clearly
@@ -179,6 +199,12 @@ For live editing, run `npm run dev` and `npm run dev:ui` separately, and use
 `APP_ORIGIN=http://localhost:5173` for the Vite browser origin. A production build
 serves frontend and API from the single Node process. `npm run format` formats
 the source. No tests send emails or issue device commands.
+
+For interface copy, use English source messages with Polish translations in
+`src/locales/` and the `useI18n` hook for text, dates and numbers. System error
+translations live in `shared/systemMessages.ts`; notification templates live in
+`server/notificationMessages.ts`. Keep placeholders identical in both languages
+and interpolate user-provided names instead of translating them.
 
 To import a private session from the earlier diagnostic prototype, stop any
 other process refreshing that session, then run:

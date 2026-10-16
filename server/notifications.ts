@@ -14,15 +14,24 @@ import {
 } from './energy.js';
 import { digest } from './crypto.js';
 import { energySource, currentHeatingState } from './estimation.js';
-import type { EnergyStats } from '../shared/types.js';
+import type { EnergyStats, NotificationContent } from '../shared/types.js';
+import type { Language } from '../shared/i18n.js';
+import { localizeSystemMessage } from '../shared/systemMessages.js';
+import { transaction } from './db.js';
+import { notificationText as t } from './notificationMessages.js';
 import { emailConfigured, type Config } from './config.js';
 
-const format = (n: number | null) =>
-  n === null ? 'brak danych' : `${n.toFixed(2).replace('.', ',')} kWh`;
-const energy = (stats: EnergyStats) =>
-  `${stats.estimatedKwh !== null ? '≈ ' : ''}${format(stats.kwh)}`;
-const sources = (stats: EnergyStats) =>
-  `Pomiar: ${format(stats.measuredKwh)}; estymacja: ${format(stats.estimatedKwh)}.`;
+const format = (n: number | null, language: Language) =>
+  n === null
+    ? t(language, 'no data')
+    : `${language === 'pl' ? n.toFixed(2).replace('.', ',') : n.toFixed(2)} kWh`;
+const energy = (stats: EnergyStats, language: Language) =>
+  `${stats.estimatedKwh !== null ? '≈ ' : ''}${format(stats.kwh, language)}`;
+const sources = (stats: EnergyStats, language: Language) =>
+  t(language, 'Measured: {measured}; estimated: {estimated}.', {
+    measured: format(stats.measuredKwh, language),
+    estimated: format(stats.estimatedKwh, language),
+  });
 const coverage = (n: number) => `${Math.round(n * 100)}%`;
 type Row = Record<string, any>;
 
@@ -31,13 +40,24 @@ function enqueue(
   id: string,
   homeId: string | null,
   kind: string,
-  title: string,
-  body: string,
+  content: (language: Language) => NotificationContent,
   now: number,
 ) {
-  db.prepare(
-    'INSERT OR IGNORE INTO notifications(id,home_id,kind,title,body,created_at) VALUES(?,?,?,?,?,?)',
-  ).run(id, homeId, kind, title, body, now);
+  transaction(db, () => {
+    const english = content('en');
+    const inserted = db
+      .prepare(
+        'INSERT OR IGNORE INTO notifications(id,home_id,kind,title,body,created_at) VALUES(?,?,?,?,?,?)',
+      )
+      .run(id, homeId, kind, english.title, english.body, now);
+    // Only new events get translations: retries and historical records stay unchanged.
+    // The existing metadata table avoids a schema/data migration for display-only text.
+    if (inserted.changes)
+      db.prepare('INSERT OR REPLACE INTO metadata(key,value) VALUES(?,?)').run(
+        `notification-pl/${id}`,
+        JSON.stringify(content('pl')),
+      );
+  });
 }
 
 export function evaluateNotifications(db: DatabaseSync, now: number): void {
@@ -56,14 +76,35 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
         .map((d) => ({ name: d.name, stats: usage(db, [d], start, end, now) }))
         .filter((d) => d.stats.kwh !== null)
         .sort((a, b) => b.stats.kwh! - a.stats.kwh!)
-        .slice(0, 5)
-        .map((d) => `• ${d.name}: ${energy(d.stats)} (${sources(d.stats)})`)
-        .join('\n');
-      const details =
-        `Mieszkanie: ${home.name}\nDzień: ${day}\nZaobserwowane zużycie: ${energy(stats)}\n${sources(stats)}\n` +
-        `Zakres: ${stats.metered} liczników, ${stats.estimated} estymowanych / ${stats.monitored} wybranych urządzeń; pokrycie czasu ${coverage(stats.coverage)}.\n` +
-        (stats.complete ? '' : 'Suma częściowa. Brakujące pomiary nie są zerowym zużyciem.\n') +
-        `\nNajwiększy udział w sumie:\n${contributors || 'Brak dostępnych odczytów.'}`;
+        .slice(0, 5);
+      const details = (language: Language) =>
+        t(language, 'Home: {name}\nDay: {day}\nObserved usage: {energy}\n{sources}\n', {
+          name: home.name,
+          day,
+          energy: energy(stats, language),
+          sources: sources(stats, language),
+        }) +
+        t(
+          language,
+          'Scope: {metered} meters, {estimated} estimated / {monitored} selected devices; time coverage {coverage}.\n',
+          {
+            metered: stats.metered,
+            estimated: stats.estimated,
+            monitored: stats.monitored,
+            coverage: coverage(stats.coverage),
+          },
+        ) +
+        (stats.complete
+          ? ''
+          : t(language, 'Partial total. Missing readings do not mean zero usage.\n')) +
+        t(language, '\nLargest contributors:\n{contributors}', {
+          contributors:
+            contributors
+              .map(
+                (d) => `• ${d.name}: ${energy(d.stats, language)} (${sources(d.stats, language)})`,
+              )
+              .join('\n') || t(language, 'No readings available.'),
+        });
       if (
         home.rules.dailyLimit !== null &&
         stats.kwh !== null &&
@@ -74,8 +115,14 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
           `threshold/${home.id}/${day}`,
           home.id,
           'threshold',
-          `Próg energii: ${home.name}`,
-          `${details}\n\nPrzekroczony próg dzienny: ${format(home.rules.dailyLimit)}.`,
+          (language) => ({
+            title: t(language, 'Energy threshold: {name}', { name: home.name }),
+            body:
+              details(language) +
+              t(language, '\n\nDaily threshold exceeded: {limit}.', {
+                limit: format(home.rules.dailyLimit, language),
+              }),
+          }),
           now,
         );
       }
@@ -125,9 +172,27 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
           `anomaly/${home.id}/${day}`,
           home.id,
           'anomaly',
-          `Nietypowe zużycie: ${home.name}`,
-          `${details}\n\nZużycie w porównaniu (bieżąca konfiguracja): ${energy(current)}.\nŚrednia do tej samej pory: ${current.estimatedKwh !== null ? '≈ ' : ''}${format(average)} (${comparable.length} porównywalnych dni).\n` +
-            `Warunki: wzrost o co najmniej ${home.rules.increasePercent}% i ${format(home.rules.increaseKwh)}.`,
+          (language) => ({
+            title: t(language, 'Unusual usage: {name}', { name: home.name }),
+            body:
+              details(language) +
+              t(
+                language,
+                '\n\nComparable usage (current configuration): {current}.\nAverage by the same time: {average} ({days} comparable days).\n',
+                {
+                  current: energy(current, language),
+                  average: `${current.estimatedKwh !== null ? '≈ ' : ''}${format(average, language)}`,
+                  days: comparable.length,
+                },
+              ) +
+              t(language, 'Conditions: an increase of at least {percent}% and {increase}.', {
+                percent: String(home.rules.increasePercent).replace(
+                  '.',
+                  language === 'pl' ? ',' : '.',
+                ),
+                increase: format(home.rules.increaseKwh, language),
+              }),
+          }),
           now,
         );
       }
@@ -141,20 +206,19 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
     weekEnd = monday.toString();
   const key = `weekly/${weekStart}`;
   if (db.prepare('SELECT id FROM notifications WHERE id=?').get(key)) return;
-  const lines = overview.homes.map((home) => {
+  const homes = overview.homes.map((home) => {
     const devices = devicesFor(db, home.id);
-    const current = usage(db, devices, dayBounds(weekStart).start, dayBounds(weekEnd).start, now);
-    const before = usage(
-      db,
-      devices,
-      dayBounds(previousDate(weekStart, 7)).start,
-      dayBounds(weekStart).start,
-      now,
-    );
-    return (
-      `${home.name} (${home.accountLabel}): ${energy(current)}; pokrycie ${coverage(current.coverage)}. ${sources(current)}\n` +
-      `  Poprzedni tydzień: ${energy(before)}; pokrycie ${coverage(before.coverage)}. ${sources(before)}`
-    );
+    return {
+      home,
+      current: usage(db, devices, dayBounds(weekStart).start, dayBounds(weekEnd).start, now),
+      before: usage(
+        db,
+        devices,
+        dayBounds(previousDate(weekStart, 7)).start,
+        dayBounds(weekStart).start,
+        now,
+      ),
+    };
   });
   const monitored = devicesFor(db).filter((d) => d.included);
   const unsupported = monitored.filter((d) => energySource(d) === 'missing');
@@ -164,20 +228,68 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
   const stale = monitored.filter(
     (d) => !d.online || !d.present || now - (d.last_seen ?? 0) > MAX_GAP,
   );
-  const accountHealth = accounts(db, now)
-    .map(
-      (a) =>
-        `${a.label}: ${a.error || (a.lastSync && now - a.lastSync <= MAX_GAP ? 'odczyt działa' : 'odczyty nieaktualne')}`,
-    )
-    .join('\n');
-  const body =
-    `Podsumowanie okresu ${weekStart} – ${previousDate(weekEnd, 1)} (${TIMEZONE}).\n\n` +
-    `${lines.join('\n\n') || 'Brak mieszkań.'}\n\nStan monitorowania:\n${accountHealth}\n` +
-    `Bez licznika lub konfiguracji estymacji: ${unsupported.length}${unsupported.length ? ` (${unsupported.map((d) => d.name).join(', ')})` : ''}.\n` +
-    `Estymacja bez aktualnego sygnału grzania: ${unknown.length}${unknown.length ? ` (${unknown.map((d) => d.name).join(', ')})` : ''}.\n` +
-    `Offline lub nieaktualne: ${stale.length}${stale.length ? ` (${stale.map((d) => d.name).join(', ')})` : ''}.\n\n` +
-    '≈ oznacza sumę zawierającą estymację: moc ogrzewania × zaobserwowany czas grzania. Niepełne sumy obejmują wyłącznie dostępne dane. Podsumowanie wysyłamy również wtedy, gdy nie było alertów.';
-  enqueue(db, key, null, 'weekly', `Energia: podsumowanie tygodnia ${weekStart}`, body, now);
+  const health = accounts(db, now);
+  enqueue(
+    db,
+    key,
+    null,
+    'weekly',
+    (language) => {
+      const lines = homes.map(
+        ({ home, current, before }) =>
+          t(language, '{name} ({account}): {energy}; coverage {coverage}. {sources}\n', {
+            name: home.name,
+            account: home.accountLabel,
+            energy: energy(current, language),
+            coverage: coverage(current.coverage),
+            sources: sources(current, language),
+          }) +
+          t(language, '  Previous week: {energy}; coverage {coverage}. {sources}', {
+            energy: energy(before, language),
+            coverage: coverage(before.coverage),
+            sources: sources(before, language),
+          }),
+      );
+      const accountHealth = health
+        .map(
+          (account) =>
+            `${account.label}: ${account.error ? localizeSystemMessage(account.error, language) : t(language, account.lastSync && now - account.lastSync <= MAX_GAP ? 'readings working' : 'readings stale')}`,
+        )
+        .join('\n');
+      const deviceNames = (devices: Row[]) =>
+        devices.length ? ` (${devices.map((device) => device.name).join(', ')})` : '';
+      return {
+        title: t(language, 'Energy: weekly summary {start}', { start: weekStart }),
+        body:
+          t(language, 'Summary for {start} – {end} ({timezone}).\n\n', {
+            start: weekStart,
+            end: previousDate(weekEnd, 1),
+            timezone: TIMEZONE,
+          }) +
+          t(language, '{homes}\n\nMonitoring status:\n{accounts}\n', {
+            homes: lines.join('\n\n') || t(language, 'No homes.'),
+            accounts: accountHealth,
+          }) +
+          t(language, 'Without a meter or estimation configuration: {count}{names}.\n', {
+            count: unsupported.length,
+            names: deviceNames(unsupported),
+          }) +
+          t(language, 'Estimation without a current heating signal: {count}{names}.\n', {
+            count: unknown.length,
+            names: deviceNames(unknown),
+          }) +
+          t(language, 'Offline or stale: {count}{names}.\n\n', {
+            count: stale.length,
+            names: deviceNames(stale),
+          }) +
+          t(
+            language,
+            '≈ marks totals containing estimates: heating power × observed heating time. Incomplete totals include only available data. We send summaries even when there were no alerts.',
+          ),
+      };
+    },
+    now,
+  );
 }
 
 export async function deliverPending(
@@ -199,14 +311,14 @@ export async function deliverPending(
   for (const event of pending) {
     if (event.first_attempt !== null && now - event.first_attempt >= 23 * 3600000) {
       db.prepare("UPDATE notifications SET status='uncertain',error=? WHERE id=?").run(
-        'Okno bezpiecznego ponawiania wygasło. Sprawdź dostarczenie w Resend.',
+        'The safe retry window expired. Check delivery in Resend.',
         event.id,
       );
       continue;
     }
     if (event.first_attempt === null && now - event.created_at >= 24 * 3600000) {
       db.prepare("UPDATE notifications SET status='expired',error=? WHERE id=?").run(
-        'Wiadomość jest starsza niż 24 godziny. Pominięto nieaktualną wysyłkę.',
+        'The message is older than 24 hours. Outdated delivery was skipped.',
         event.id,
       );
       continue;
@@ -217,7 +329,7 @@ export async function deliverPending(
         from: config.emailFrom,
         to: [config.emailTo],
         subject: event.title,
-        text: `${event.body}\n\nOtwórz panel: ${config.origin}/#${event.home_id ? `home/${event.home_id}` : ''}`,
+        text: `${event.body}\n\nOpen dashboard: ${config.origin}/#${event.home_id ? `home/${event.home_id}` : ''}`,
       });
     db.prepare(
       'UPDATE notifications SET payload=?,first_attempt=COALESCE(first_attempt,?),attempts=attempts+1,next_attempt=? WHERE id=?',
@@ -246,13 +358,13 @@ export async function deliverPending(
         ![408, 409, 429].includes(response.status)
       ) {
         db.prepare("UPDATE notifications SET status='failed',error=? WHERE id=?").run(
-          `Resend odrzucił wiadomość (HTTP ${response.status}). Sprawdź konfigurację nadawcy i klucza.`,
+          `Resend rejected the message (HTTP ${response.status}). Check the sender and API key configuration.`,
           event.id,
         );
       } else throw new Error('Transient delivery error');
     } catch {
       db.prepare("UPDATE notifications SET status='retry',error=?,next_attempt=? WHERE id=?").run(
-        'Nie potwierdzono wysyłki. Ponowimy ją z tym samym identyfikatorem.',
+        'Delivery was not confirmed. We will retry with the same identifier.',
         now + Math.min(3600000, 300000 * 2 ** Math.min(event.attempts, 4)),
         event.id,
       );
