@@ -124,23 +124,23 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
     if (!['GET', 'HEAD'].includes(request.method) && request.headers.origin !== config.origin)
       return reply
         .code(403)
-        .send({ error: 'Żądanie musi pochodzić z adresu aplikacji (APP_ORIGIN).' });
+        .send({ error: 'Requests must come from the application address (APP_ORIGIN).' });
     if (route === '/api/auth' || route === '/api/auth/login') return;
     if (!authenticated(request.cookies.tem_session))
-      return reply.code(401).send({ error: 'Zaloguj się, aby kontynuować.' });
+      return reply.code(401).send({ error: 'Sign in to continue.' });
   });
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof ZodError)
       return reply.code(400).send({
-        error: 'Sprawdź wartości w formularzu.',
+        error: 'Check the form values.',
         fields: error.issues.map((i) => i.path.join('.')),
       });
     const status = Number((error as any).statusCode);
     if (status === 429)
-      return reply.code(429).send({ error: 'Zbyt wiele prób. Spróbuj ponownie za minutę.' });
+      return reply.code(429).send({ error: 'Too many attempts. Try again in a minute.' });
     if (status >= 400 && status < 500)
-      return reply.code(status).send({ error: 'Nieprawidłowe żądanie.' });
-    return reply.code(500).send({ error: 'Operacja nie powiodła się. Spróbuj ponownie.' });
+      return reply.code(status).send({ error: 'Invalid request.' });
+    return reply.code(500).send({ error: 'The operation failed. Try again.' });
   });
 
   app.get('/healthz', async () => ({ ok: true }));
@@ -153,7 +153,7 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
     async (request, reply) => {
       const { password } = z.object({ password: z.string().max(1024) }).parse(request.body);
       if (!timingSafeEqual(scryptSync(password, salt, 64), passwordHash))
-        return reply.code(401).send({ error: 'Nieprawidłowe hasło.' });
+        return reply.code(401).send({ error: 'Incorrect password.' });
       const token = randomBytes(32).toString('hex');
       db.prepare('DELETE FROM sessions WHERE expires<=?').run(Date.now());
       db.prepare('INSERT INTO sessions(hash,expires) VALUES(?,?)').run(
@@ -180,7 +180,7 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
       Date.now(),
       daysSchema.parse((request.query as any).days),
     );
-    return home ?? reply.code(404).send({ error: 'Nie znaleziono mieszkania.' });
+    return home ?? reply.code(404).send({ error: 'Home not found.' });
   });
   app.get<{ Params: { id: string } }>('/api/devices/:id', async (request, reply) => {
     const device = getDevice(
@@ -189,7 +189,7 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
       Date.now(),
       daysSchema.parse((request.query as any).days),
     );
-    return device ?? reply.code(404).send({ error: 'Nie znaleziono urządzenia.' });
+    return device ?? reply.code(404).send({ error: 'Device not found.' });
   });
   app.put<{ Params: { id: string } }>('/api/homes/:id/rules', async (request, reply) => {
     const rules = rulesSchema.parse(request.body);
@@ -205,7 +205,7 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
         rules.increaseKwh,
         request.params.id,
       );
-    if (!result.changes) return reply.code(404).send({ error: 'Nie znaleziono mieszkania.' });
+    if (!result.changes) return reply.code(404).send({ error: 'Home not found.' });
     return { ok: true };
   });
   app.put<{ Params: { id: string } }>('/api/devices/:id', async (request, reply) => {
@@ -213,12 +213,12 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
     const result = db
       .prepare('UPDATE devices SET included=? WHERE id=?')
       .run(Number(included), request.params.id);
-    if (!result.changes) return reply.code(404).send({ error: 'Nie znaleziono urządzenia.' });
+    if (!result.changes) return reply.code(404).send({ error: 'Device not found.' });
     return { ok: true };
   });
   app.put<{ Params: { id: string } }>('/api/devices/:id/estimation', async (request, reply) => {
     if (!configureEstimation(db, request.params.id, request.body, Date.now()))
-      return reply.code(404).send({ error: 'Nie znaleziono urządzenia.' });
+      return reply.code(404).send({ error: 'Device not found.' });
     return { ok: true };
   });
   app.get('/api/accounts', async () => accounts(db));
@@ -257,9 +257,9 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
       if (flows.size >= 5)
         return reply
           .code(429)
-          .send({ error: 'Dokończ rozpoczęte połączenie lub poczekaj 5 minut.' });
+          .send({ error: 'Complete the connection in progress or wait 5 minutes.' });
       if (body.accountId && !db.prepare('SELECT id FROM accounts WHERE id=?').get(body.accountId))
-        return reply.code(404).send({ error: 'Nie znaleziono konta.' });
+        return reply.code(404).send({ error: 'Account not found.' });
       try {
         const response = await tuya('start', { userCode: body.userCode });
         if (!response.ok || typeof response.qrcode !== 'string') throw new Error('QR failed');
@@ -282,7 +282,7 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
         };
       } catch {
         return reply.code(502).send({
-          error: 'Nie udało się wygenerować QR. Sprawdź kod użytkownika i spróbuj ponownie.',
+          error: 'Could not generate the QR code. Check the user code and try again.',
         });
       }
     },
@@ -292,15 +292,16 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
     async (request, reply) => {
       const flow = flows.get(request.params.id);
       if (!flow || flow.expires < Date.now() || flow.owner !== digest(request.cookies.tem_session!))
-        return reply.code(410).send({ error: 'Kod QR wygasł. Wygeneruj nowy.' });
-      if (flow.busy) return reply.code(409).send({ error: 'Trwa potwierdzanie połączenia.' });
+        return reply.code(410).send({ error: 'The QR code expired. Generate a new one.' });
+      if (flow.busy)
+        return reply.code(409).send({ error: 'Connection confirmation is in progress.' });
       flow.busy = true;
       try {
         const response = await tuya('confirm', { userCode: flow.userCode, qrcode: flow.qrcode });
         if (!response.ok)
           return reply.code(409).send({
             error:
-              'Zeskanuj QR i zatwierdź połączenie w aplikacji. Jeśli kod wygasł, wygeneruj nowy.',
+              'Scan the QR code and approve the connection in the app. If the code expired, generate a new one.',
           });
         const session = sessionSchema.parse(response.session);
         const identity = digest(session.token_info.uid);
@@ -310,7 +311,8 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
             .get(flow.accountId) as { identity: string };
           if (existing.identity !== identity)
             return reply.code(409).send({
-              error: 'To inne konto Tuya. Zaloguj właściwe konto lub dodaj je jako nowe.',
+              error:
+                'This is a different Tuya account. Sign in to the correct account or add it as a new account.',
             });
         }
         db.prepare(
@@ -321,9 +323,7 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
         void collector.sync().catch(() => {});
         return { ok: true };
       } catch {
-        return reply
-          .code(502)
-          .send({ error: 'Nie udało się potwierdzić połączenia. Spróbuj ponownie.' });
+        return reply.code(502).send({ error: 'Could not confirm the connection. Try again.' });
       } finally {
         flow.busy = false;
       }
@@ -334,9 +334,7 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
   if (existsSync(path.join(clientRoot, 'index.html'))) {
     await app.register(staticFiles, { root: clientRoot, prefix: '/', index: 'index.html' });
   }
-  app.setNotFoundHandler((_request, reply) =>
-    reply.code(404).send({ error: 'Nie znaleziono strony.' }),
-  );
+  app.setNotFoundHandler((_request, reply) => reply.code(404).send({ error: 'Page not found.' }));
   app.addHook('onClose', async () => {
     await collector.stop();
     await delivery; // The sender must finish before its database is closed.

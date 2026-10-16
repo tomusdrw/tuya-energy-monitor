@@ -361,3 +361,32 @@ test('slow email delivery never stalls collection or starts concurrent outbox de
     await app.close();
   }
 });
+
+test('API errors stay canonical English even with a Polish browser preference', async () => {
+  const { app, login } = await setup();
+  try {
+    const unauthenticated = await app.inject({
+      url: '/api/overview',
+      headers: { 'accept-language': 'pl' },
+    });
+    assert.equal(unauthenticated.json().error, 'Sign in to continue.');
+    const incorrect = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      headers: { origin: config.origin },
+      payload: { password: 'incorrect' },
+    });
+    assert.equal(incorrect.json().error, 'Incorrect password.');
+    const cookie = String((await login()).headers['set-cookie']).split(';')[0];
+    assert.equal(
+      (await app.inject({ url: '/api/overview?days=invalid', headers: { cookie } })).json().error,
+      'Check the form values.',
+    );
+    assert.equal(
+      (await app.inject({ url: '/api/homes/missing', headers: { cookie } })).json().error,
+      'Home not found.',
+    );
+  } finally {
+    await app.close();
+  }
+});

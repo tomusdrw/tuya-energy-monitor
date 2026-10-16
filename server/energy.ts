@@ -12,6 +12,7 @@ import type {
   NotificationView,
   Overview,
 } from '../shared/types.js';
+import { localizeSystemMessage } from '../shared/systemMessages.js';
 import { scopedId } from './crypto.js';
 import { transaction } from './db.js';
 import { STREAM_FRESHNESS } from './incremental.js';
@@ -317,7 +318,7 @@ export function accounts(db: DatabaseSync, now = Date.now()): AccountView[] {
     id: a.id,
     label: a.label,
     lastSync: a.last_sync,
-    error: a.error,
+    error: a.error ? localizeSystemMessage(a.error, 'en') : null,
     healthy: !a.error && a.last_sync !== null && now - a.last_sync <= MAX_GAP,
     homeCount: a.home_count,
     deviceCount: a.device_count,
@@ -326,17 +327,22 @@ export function accounts(db: DatabaseSync, now = Date.now()): AccountView[] {
 
 export function notifications(db: DatabaseSync): NotificationView[] {
   return (
-    db.prepare('SELECT * FROM notifications ORDER BY created_at DESC LIMIT 100').all() as Row[]
+    db
+      .prepare(
+        "SELECT n.*, m.value AS translation FROM notifications n LEFT JOIN metadata m ON m.key='notification-pl/' || n.id ORDER BY n.created_at DESC LIMIT 100",
+      )
+      .all() as Row[]
   ).map((n) => ({
     id: n.id,
     homeId: n.home_id,
     kind: n.kind,
     title: n.title,
     body: n.body,
+    ...(n.translation ? { translations: { pl: JSON.parse(n.translation) } } : {}),
     createdAt: n.created_at,
     status: n.status,
     sentAt: n.sent_at,
-    error: n.error,
+    error: n.error ? localizeSystemMessage(n.error, 'en') : null,
   }));
 }
 

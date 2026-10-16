@@ -12,7 +12,8 @@
 
 ## Global Constraints
 
-- Polish interface, Europe/Warsaw calendar, single owner; no device commands.
+- English-default interface with an English/Polish selector, Europe/Warsaw calendar,
+  single owner; no device commands. See `2026-10-16-english-polish.md` for the language update.
 - Five-minute collection; fifteen-minute freshness/maximum interval.
 - Missing energy is never zero. Only validated cumulative counters are used.
 - One Docker container, SQLite volume, public MIT repository, no secrets in git.

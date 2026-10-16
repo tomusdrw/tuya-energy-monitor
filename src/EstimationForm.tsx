@@ -2,25 +2,28 @@ import { useState, type FormEvent } from 'react';
 import { Flame, Save } from 'lucide-react';
 import type { DeviceDetail, StatusValue } from '../shared/types';
 import { api } from './api';
-import { Badge, Notice, SectionTitle, date, number } from './components';
+import { Badge, Notice, SectionTitle } from './components';
+import { useI18n } from './i18n';
+import { messages } from './locales/estimation';
 
-const stateLabel = { on: 'Grzanie aktywne', off: 'Postój', unknown: 'Stan grzania nieznany' };
+const stateLabel = { on: 'Heating active', off: 'Idle', unknown: 'Heating state unknown' };
 function parseValues(text: string): StatusValue[] {
   let values: unknown;
   try {
     values = JSON.parse(text);
   } catch {
-    throw new Error('Wpisz listę wartości, np. ["heating"] albo [true].');
+    throw new Error('Enter a list of values, e.g. ["heating"] or [true].');
   }
   if (
     !Array.isArray(values) ||
     !values.every((v) => ['string', 'number', 'boolean'].includes(typeof v))
   )
-    throw new Error('Lista może zawierać tekst, liczby lub true / false.');
+    throw new Error('The list may contain text, numbers, or true / false.');
   return values as StatusValue[];
 }
 
 export function EstimationForm({ device, onSaved }: { device: DeviceDetail; onSaved: () => void }) {
+  const { t, number, date } = useI18n(messages);
   const e = device.estimation;
   const [enabled, setEnabled] = useState(e.enabled);
   const defaultPower = device.category === 'wk' ? 1.25 : '';
@@ -55,83 +58,85 @@ export function EstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
   return (
     <section className="panel estimation-panel">
       <SectionTitle
-        title="Estymacja z czasu grzania"
-        subtitle="Dla ogrzewania elektrycznego o stałej mocy"
+        title={t('Heating runtime estimation')}
+        subtitle={t('For electric heating with a constant power rating')}
       >
         <Flame size={22} />
       </SectionTitle>
       <div className="estimation-status">
         <Badge tone={e.state === 'on' ? 'warning' : e.state === 'off' ? 'success' : 'muted'}>
-          {stateLabel[e.state]}
+          {t(stateLabel[e.state])}
         </Badge>
-        <span>{e.enabled ? 'Estymacja włączona' : 'Estymacja wyłączona'}</span>
+        <span>{e.enabled ? t('Estimation enabled') : t('Estimation disabled')}</span>
       </div>
       <div className="runtime-grid">
         <div>
-          <span>Czas grzania dzisiaj</span>
+          <span>{t('Heating time today')}</span>
           <strong>
             {number(device.stats.heatingHours)} <small>h</small>
           </strong>
         </div>
         <div>
-          <span>Łącznie zaobserwowano</span>
+          <span>{t('Total observed')}</span>
           <strong>
             {number(e.totalHeatingHours)} <small>h</small>
           </strong>
         </div>
         <div className="formula">
-          <span>Szacowane zużycie</span>
-          <strong>moc × czas grzania</strong>
+          <span>{t('Estimated usage')}</span>
+          <strong>{t('power × heating time')}</strong>
           <small>kW × h = kWh</small>
         </div>
       </div>
       {device.energySource === 'measured' ? (
         <Notice>
-          Urządzenie udostępnia pomiar energii. Pomiar ma pierwszeństwo; estymacja nie dodaje
-          zużycia dla tego samego urządzenia.
+          {t(
+            'The device provides energy readings. Measurements take precedence; estimation does not add usage for the same device.',
+          )}
         </Notice>
       ) : e.enabled && e.state === 'unknown' ? (
         <Notice tone="warning">
-          Brak aktualnego, rozpoznanego sygnału grzania. Ten okres pozostaje bez danych, nawet gdy
-          termostat jest online.
+          {t(
+            'No current, recognized heating signal. This period remains missing data even when the thermostat is online.',
+          )}
         </Notice>
       ) : null}
       <p className="field-help">
-        Samo włączenie termostatu (np. <code>switch</code>) nie potwierdza pracy grzałki. Wybierz
-        pole pokazujące faktycznie załączone ogrzewanie i podaj moc obwodu, którym steruje
-        termostat.
+        {t(
+          'Turning the thermostat on (e.g. switch) does not confirm that the heater is running. Choose a field that indicates active heating and enter the power of the circuit controlled by the thermostat.',
+        )}
       </p>
       <form onSubmit={save} onChange={() => setSaved(false)}>
-        {error && <Notice tone="error">{error}</Notice>}
+        {error && <Notice tone="error">{t(error)}</Notice>}
         <label className="check-label">
           <input
             type="checkbox"
             checked={enabled}
             onChange={(event) => setEnabled(event.target.checked)}
           />
-          Włącz estymację dla tego urządzenia
+          {t('Enable estimation for this device')}
         </label>
         <div className="form-two estimation-fields">
           <label>
-            Moc ogrzewania (kW)
+            {t('Heating power (kW)')}
             <input
               type="number"
               inputMode="decimal"
               min="0.001"
               max="1000"
               step="any"
-              placeholder="np. 1,2"
+              placeholder={t('e.g. 1.2')}
               required={enabled}
               value={power}
               onChange={(event) => setPower(event.target.value)}
             />
           </label>
           <label>
-            Pole aktywnego grzania
+            {t('Active heating field')}
             <input
               list={`fields-${device.id}`}
               value={code}
-              placeholder="np. work_state"
+              placeholder={t('e.g. work_state')}
               maxLength={100}
               required={enabled}
               onChange={(event) => setCode(event.target.value)}
@@ -147,8 +152,10 @@ export function EstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
         </div>
         {device.category === 'wk' && (
           <p className="field-help">
-            Domyślnie 1,25 kW — moc założona. Możesz ją zmienić na łączną moc ogrzewania sterowanego
-            przez ten termostat.
+            {t(
+              'The default of {power} kW is an assumed power rating. You can change it to the total heating power controlled by this thermostat.',
+              { power: number(1.25) },
+            )}
           </p>
         )}
         {e.suggestion && (
@@ -162,12 +169,12 @@ export function EstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
               setSaved(false);
             }}
           >
-            Użyj wykrytego pola: {e.suggestion.heatingCode}
+            {t('Use detected field: {code}', { code: e.suggestion.heatingCode ?? '' })}
           </button>
         )}
         <div className="form-two estimation-fields">
           <label>
-            Wartości podczas grzania
+            {t('Values while heating')}
             <input
               value={on}
               maxLength={4000}
@@ -176,7 +183,7 @@ export function EstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
             />
           </label>
           <label>
-            Wartości podczas postoju
+            {t('Values while idle')}
             <input
               value={off}
               maxLength={4000}
@@ -186,36 +193,38 @@ export function EstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
           </label>
         </div>
         <p className="field-help">
-          Listy wartości: <code>["heating"]</code> i <code>["standby", "idle"]</code> albo{' '}
-          <code>[true]</code> i <code>[false]</code>. Tekst zapisz w cudzysłowie. Pozostałe wartości
-          oznaczają brak danych.
+          {t(
+            'Value lists: ["heating"] and ["standby", "idle"], or [true] and [false]. Put text in quotes. All other values mean missing data.',
+          )}
         </p>
         <div className="form-footer">
           <span className="saved-message" role="status">
             {saved
-              ? 'Konfiguracja estymacji zapisana.'
-              : 'Zmiany dotyczą przyszłych odczytów. Historia pozostaje bez zmian.'}
+              ? t('Estimation configuration saved.')
+              : t('Changes apply to future readings. History remains unchanged.')}
           </span>
           <button className="button primary" disabled={busy}>
             <Save size={16} />
-            {busy ? 'Zapisywanie…' : 'Zapisz estymację'}
+            {busy ? t('Saving…') : t('Save estimation')}
           </button>
         </div>
       </form>
       <details className="estimation-details">
-        <summary>Dostępne pola i ostatnie stany</summary>
+        <summary>{t('Available fields and latest states')}</summary>
         <p className="field-help">
-          Ostatni odczyt pól: {date(e.statusUpdatedAt)}. To dane udostępnione przez chmurę, nie
-          potwierdzenie nowej transmisji z urządzenia.
+          {t(
+            'Last field reading: {date}. This data comes from the cloud and does not confirm a new transmission from the device.',
+            { date: date(e.statusUpdatedAt) },
+          )}
         </p>
         {e.statusFields.length ? (
           <div className="diagnostic-scroll">
             <table className="diagnostic-table">
               <thead>
                 <tr>
-                  <th>Pole</th>
-                  <th>Wartość</th>
-                  <th>Znane wartości</th>
+                  <th>{t('Field')}</th>
+                  <th>{t('Value')}</th>
+                  <th>{t('Known values')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -234,25 +243,25 @@ export function EstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
             </table>
           </div>
         ) : (
-          <p className="field-help">Brak dostępnych pól w ostatnim odczycie.</p>
+          <p className="field-help">{t('No fields available in the latest reading.')}</p>
         )}
-        <h3>Ostatnie obserwacje grzania</h3>
+        <h3>{t('Recent heating observations')}</h3>
         {e.observations.length ? (
           <div className="diagnostic-scroll">
             <table className="diagnostic-table">
               <thead>
                 <tr>
-                  <th>Czas</th>
-                  <th>Stan</th>
-                  <th>Pole / wartość</th>
-                  <th>Moc / wersja</th>
+                  <th>{t('Time')}</th>
+                  <th>{t('State')}</th>
+                  <th>{t('Field / value')}</th>
+                  <th>{t('Power / version')}</th>
                 </tr>
               </thead>
               <tbody>
                 {e.observations.map((row) => (
                   <tr key={row.at}>
                     <td>{date(row.at)}</td>
-                    <td>{stateLabel[row.state]}</td>
+                    <td>{t(stateLabel[row.state])}</td>
                     <td>
                       <code>
                         {row.code ?? '—'}: {JSON.stringify(row.rawValue)}
@@ -267,12 +276,15 @@ export function EstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
             </table>
           </div>
         ) : (
-          <p className="field-help">Obserwacje zaczną się zapisywać po włączeniu estymacji.</p>
+          <p className="field-help">
+            {t('Observations will be recorded after estimation is enabled.')}
+          </p>
         )}
       </details>
       <p className="field-help">
-        Odczyt co 60 s. Przerwa powyżej 3 min lub nieznany stan przerywają liczenie. Krótkie cykle
-        mogą zostać pominięte; szacunek służy wykrywaniu nadmiernego zużycia, nie rozliczeniom.
+        {t(
+          'Readings are taken every 60 seconds. A gap over 3 minutes or an unknown state stops counting. Short cycles may be missed; estimates are for detecting excessive usage, not billing.',
+        )}
       </p>
     </section>
   );

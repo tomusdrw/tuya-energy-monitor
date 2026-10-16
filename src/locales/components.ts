@@ -1,0 +1,37 @@
+export const componentMessages: Record<string, string> = {
+  'Loading data…': 'Wczytuję dane…',
+  'Measured: {energy} kWh': 'Pomiar: {energy} kWh',
+  'Estimated: {energy} kWh': 'Estymacja: {energy} kWh',
+  '{metered} measured · {estimated} estimated / {monitored} selected · {coverage} time coverage':
+    '{metered} z pomiarem · {estimated} z estymacją / {monitored} wybranych · {coverage} pokrycia czasu',
+  'History range': 'Zakres historii',
+  '{days} days': '{days} dni',
+  'Your history starts here': 'Historia właśnie się zaczyna',
+  'The chart will appear after the first incremental report or two valid meter readings or configured heating-state readings. We do not import earlier history from the Tuya app.':
+    'Wykres pojawi się po pierwszym raporcie przyrostowym albo dwóch poprawnych odczytach licznika lub skonfigurowanego stanu grzania. Nie pobieramy wcześniejszej historii z aplikacji Tuya.',
+  'Daily energy usage in kilowatt-hours': 'Dzienne zużycie energii w kilowatogodzinach',
+  '{day}: {total}; measured: {measured} kWh; estimated: {estimated} kWh; coverage: {coverage}':
+    '{day}: {total}; pomiar: {measured} kWh; estymacja: {estimated} kWh; pokrycie: {coverage}',
+  'Energy measurement': 'Pomiar energii',
+  'Heating time × power': 'Czas grzania × moc',
+  'No data': 'Brak danych',
+  'Lighter bar = partial data': 'Jaśniejszy słupek = częściowe dane',
+  'Limit exceeded': 'Przekroczony próg',
+  'No reading': 'Brak pomiaru',
+  'Up to date': 'Aktualne dane',
+  'Partial data': 'Częściowe dane',
+  'Devices: {count}': 'Urządzenia: {count}',
+  today: 'dzisiaj',
+  'Limit: {energy} kWh / day': 'Próg: {energy} kWh / dzień',
+  'No daily limit set': 'Nie ustawiono progu dziennego',
+  'Notifications will appear here': 'Tutaj pojawią się powiadomienia',
+  'Set a limit for an apartment. Anomaly detection starts after at least 7 comparable days have been collected.':
+    'Ustaw próg w mieszkaniu. Wykrywanie anomalii zacznie działać po zebraniu co najmniej 7 porównywalnych dni.',
+  Pending: 'Oczekuje',
+  Sent: 'Wysłano',
+  Retrying: 'Ponowna próba',
+  'Check delivery': 'Sprawdź dostarczenie',
+  'Delivery failed': 'Błąd wysyłki',
+  Expired: 'Przeterminowane',
+  'Notification details': 'Szczegóły powiadomienia',
+};

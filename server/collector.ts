@@ -162,7 +162,7 @@ export class Collector {
         this.db
           .prepare('UPDATE accounts SET error=? WHERE id=?')
           .run(
-            'Nie udało się odczytać konta. Ponów synchronizację; jeśli problem trwa, połącz konto ponownie.',
+            'Could not read the account. Sync again; if the problem persists, reconnect the account.',
             account.id,
           );
       }

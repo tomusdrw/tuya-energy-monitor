@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import type { Overview, SettingsView } from '../shared/types';
 import { api, useApi } from './api';
+import { LanguageSwitcher, useI18n } from './i18n';
+import { appMessages } from './locales/app';
 import {
   Brand,
   Badge,
@@ -25,15 +27,14 @@ import {
   EnergyChart,
   HomeCard,
   Empty,
-  energyNumber,
   EnergyBreakdown,
   Coverage,
   Range,
-  date,
 } from './components';
 import { HomePage, DevicePage, AccountsPage, NotificationsPage, SettingsPage } from './pages';
 
 function Login({ onLogin }: { onLogin: () => void }) {
+  const { t } = useI18n(appMessages);
   const [password, setPassword] = useState(''),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
@@ -55,16 +56,16 @@ function Login({ onLogin }: { onLogin: () => void }) {
       <div className="login-intro">
         <Brand />
         <div>
-          <span className="eyebrow light">TWOJE MIESZKANIA. JEDEN WIDOK.</span>
+          <span className="eyebrow light">{t('YOUR APARTMENTS. ONE VIEW.')}</span>
           <h1>
-            Miej energię
+            {t('Keep your energy')}
             <br />
-            pod kontrolą.
+            {t('under control.')}
           </h1>
           <p>
-            Zobacz, ile zużywa ogrzewanie.
+            {t('See how much energy your heating uses.')}
             <br />
-            Wychwyć zmiany, które wymagają uwagi.
+            {t('Spot changes that need your attention.')}
           </p>
           <div className="login-art" aria-hidden="true">
             {[30, 46, 38, 62, 47, 72, 56, 82, 62, 96, 75, 88].map((v, i) => (
@@ -72,18 +73,21 @@ function Login({ onLogin }: { onLogin: () => void }) {
             ))}
           </div>
         </div>
-        <span className="login-caption">TUYA ENERGY MONITOR · TWOJA PRYWATNA INSTANCJA</span>
+        <span className="login-caption">{t('TUYA ENERGY MONITOR · YOUR PRIVATE INSTANCE')}</span>
       </div>
       <main className="login-main">
+        <div className="login-language">
+          <LanguageSwitcher />
+        </div>
         <form className="login-form" onSubmit={submit}>
           <span className="secure-icon">
             <ShieldCheck size={27} />
           </span>
-          <h2>Witaj ponownie</h2>
-          <p>Zaloguj się do panelu monitorowania.</p>
-          {error && <Notice tone="error">{error}</Notice>}
+          <h2>{t('Welcome back')}</h2>
+          <p>{t('Sign in to your monitoring dashboard.')}</p>
+          {error && <Notice tone="error">{t(error)}</Notice>}
           <label>
-            Hasło właściciela
+            {t('Owner password')}
             <input
               type="password"
               autoComplete="current-password"
@@ -95,11 +99,11 @@ function Login({ onLogin }: { onLogin: () => void }) {
             />
           </label>
           <button className="button primary full" disabled={busy}>
-            {busy ? 'Logowanie…' : 'Zaloguj się'}
+            {busy ? t('Signing in…') : t('Sign in')}
             <ChevronRight size={18} />
           </button>
           <p className="login-help">
-            Dostęp tylko dla właściciela. Użyj hasła ustawionego przy uruchomieniu aplikacji.
+            {t('Owner access only. Use the password configured when the app was set up.')}
           </p>
         </form>
       </main>
@@ -116,26 +120,31 @@ export function Dashboard({
   days: number;
   setDays: (n: number) => void;
 }) {
+  const { t, number, date, energyNumber } = useI18n(appMessages);
   const outstanding = data.homes.filter((h) => h.stats.fresh < h.stats.monitored).length;
   const limits = data.homes.filter((h) => h.rules.dailyLimit !== null).length;
   return (
     <>
       <PageTitle
-        title="Zużycie energii"
-        subtitle="Twoje mieszkania i ogrzewanie — w jednym miejscu."
+        title={t('Energy usage')}
+        subtitle={t('Your apartments and heating in one place.')}
       >
-        <Badge tone="blue">Dzisiaj · {date(data.now, false)}</Badge>
+        <Badge tone="blue">
+          {t('Today')} · {date(data.now, false)}
+        </Badge>
       </PageTitle>
       {!data.accounts.length ? (
         <div className="panel">
-          <Empty title="Zacznij od połączenia konta">
-            Dodaj konto Tuya lub Smart Life. Odczytamy domy, urządzenia i dostępne pomiary energii.
+          <Empty title={t('Start by connecting an account')}>
+            {t(
+              'Add a Tuya or Smart Life account. We will read its homes, devices and available energy measurements.',
+            )}
             <br />
-            Ustawienia ogrzewania pozostaną pod Twoją kontrolą.
+            {t('Your heating settings stay under your control.')}
           </Empty>
           <div className="empty-action">
             <a href="#accounts" className="button primary">
-              Połącz pierwsze konto <ArrowUpRight size={18} />
+              {t('Connect your first account')} <ArrowUpRight size={18} />
             </a>
           </div>
         </div>
@@ -145,18 +154,20 @@ export function Dashboard({
             .filter((account) => !account.healthy)
             .map((account) => (
               <Notice key={account.id} tone="warning">
-                <strong>Konto {account.label} wymaga uwagi.</strong>{' '}
-                {account.error ??
-                  (account.lastSync === null
-                    ? 'Czekamy na pierwszy odczyt mieszkań i urządzeń.'
-                    : 'Odczyty z tego konta są nieaktualne.')}{' '}
-                Suma może nie obejmować wszystkich mieszkań.{' '}
-                <a href="#accounts">Sprawdź połączenie</a>
+                <strong>{t('Account {name} needs attention.', { name: account.label })}</strong>{' '}
+                {t(
+                  account.error ??
+                    (account.lastSync === null
+                      ? 'Waiting for the first home and device readings.'
+                      : 'Readings from this account are out of date.'),
+                )}{' '}
+                {t('The total may not include all apartments.')}{' '}
+                <a href="#accounts">{t('Check connection')}</a>
               </Notice>
             ))}
           <div className="stats-grid">
             <div className="stat featured">
-              <span>Zaobserwowane dzisiaj</span>
+              <span>{t('Observed today')}</span>
               <strong>
                 {energyNumber(data.stats)} <small>kWh</small>
               </strong>
@@ -164,31 +175,37 @@ export function Dashboard({
               <Coverage stats={data.stats} />
             </div>
             <div className="stat">
-              <span>Monitorowane mieszkania</span>
-              <strong>{data.homes.length.toString().padStart(2, '0')}</strong>
+              <span>{t('Monitored apartments')}</span>
+              <strong>{number(data.homes.length, 0).padStart(2, '0')}</strong>
               <p>
-                Aktualne konta: {data.accounts.filter((account) => account.healthy).length} /{' '}
-                {data.accounts.length}
+                {t('Up-to-date accounts: {healthy} / {total}', {
+                  healthy: number(data.accounts.filter((account) => account.healthy).length, 0),
+                  total: number(data.accounts.length, 0),
+                })}
               </p>
             </div>
             <div className="stat">
-              <span>Urządzenia z odczytem energii</span>
+              <span>{t('Devices with energy readings')}</span>
               <strong>
-                {data.stats.metered + data.stats.estimated}
-                <small> / {data.stats.monitored}</small>
+                {number(data.stats.metered + data.stats.estimated, 0)}
+                <small> / {number(data.stats.monitored, 0)}</small>
               </strong>
-              <p>{data.stats.fresh} z aktualnym połączeniem</p>
+              <p>
+                {t('{count} with a current connection', { count: number(data.stats.fresh, 0) })}
+              </p>
             </div>
             <div className="stat">
-              <span>Ustawione progi dzienne</span>
+              <span>{t('Daily limits set')}</span>
               <strong>
-                {limits}
-                <small> / {data.homes.length}</small>
+                {number(limits, 0)}
+                <small> / {number(data.homes.length, 0)}</small>
               </strong>
               <p>
                 {outstanding
-                  ? `${outstanding} mieszkań z niepełnymi pomiarami`
-                  : 'Status monitorowania mieszkań'}
+                  ? t('Apartments with incomplete readings: {count}', {
+                      count: number(outstanding, 0),
+                    })
+                  : t('Apartment monitoring status')}
               </p>
             </div>
           </div>
@@ -196,28 +213,29 @@ export function Dashboard({
             <Notice tone="warning">
               <strong>
                 {data.stats.kwh === null
-                  ? 'Czekamy na pierwsze pomiary zużycia.'
-                  : 'Ta suma obejmuje tylko dostępne pomiary.'}
+                  ? t('Waiting for the first energy readings.')
+                  : t('This total includes available readings only.')}
               </strong>{' '}
-              Urządzenia bez pomiaru lub skonfigurowanej estymacji, przerwy w odczytach i czas
-              sprzed uruchomienia monitoringu nie są liczone jako zero.
+              {t(
+                'Devices without energy measurements or configured estimation, gaps in readings and time before monitoring started are not counted as zero.',
+              )}
             </Notice>
           )}
           <div className="panel">
             <SectionTitle
-              title="Historia zużycia"
-              subtitle="Suma energii z urządzeń włączonych do monitorowania"
+              title={t('Usage history')}
+              subtitle={t('Total energy from devices selected for monitoring')}
             >
               <Range days={days} setDays={setDays} />
             </SectionTitle>
             <EnergyChart points={data.history} />
           </div>
           <SectionTitle
-            title="Twoje mieszkania"
-            subtitle="Przejdź do mieszkania, aby zobaczyć urządzenia i ustawić własny próg."
+            title={t('Your apartments')}
+            subtitle={t('Open an apartment to see its devices and set a daily limit.')}
           >
             <a className="text-link" href="#homes">
-              Wszystkie mieszkania <ChevronRight size={16} />
+              {t('All apartments')} <ChevronRight size={16} />
             </a>
           </SectionTitle>
           <div className="home-grid">
@@ -247,6 +265,7 @@ export default function App() {
 }
 
 function Shell({ onLogout }: { onLogout: () => void }) {
+  const { t, number } = useI18n(appMessages);
   const [route, setRoute] = useState(location.hash.slice(1)),
     [menu, setMenu] = useState(false);
   const [days, setDays] = useState(14),
@@ -265,20 +284,20 @@ function Shell({ onLogout }: { onLogout: () => void }) {
     return () => window.removeEventListener('hashchange', change);
   }, []);
   const nav = [
-    { path: '', label: 'Przegląd', icon: LayoutDashboard },
-    { path: 'homes', label: 'Mieszkania', icon: Building2 },
-    { path: 'accounts', label: 'Połączone konta', icon: Link2 },
-    { path: 'alerts', label: 'Powiadomienia', icon: Bell },
-    { path: 'settings', label: 'Ustawienia', icon: Settings },
+    { path: '', label: 'Overview', icon: LayoutDashboard },
+    { path: 'homes', label: 'Apartments', icon: Building2 },
+    { path: 'accounts', label: 'Connected accounts', icon: Link2 },
+    { path: 'alerts', label: 'Notifications', icon: Bell },
+    { path: 'settings', label: 'Settings', icon: Settings },
   ];
   const active = route.startsWith('home/') || route.startsWith('device/') ? 'homes' : route;
-  const title = nav.find((n) => n.path === active)?.label ?? 'Przegląd';
+  const title = nav.find((n) => n.path === active)?.label ?? 'Overview';
   async function sync() {
     setSyncing(true);
     setMessage('');
     try {
       await api('/sync', 'POST', {});
-      setMessage('Synchronizacja rozpoczęta. Dane odświeżą się automatycznie.');
+      setMessage('Sync started. Data will refresh automatically.');
     } catch (e) {
       setMessage((e as Error).message);
     } finally {
@@ -290,7 +309,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
       {menu && (
         <button
           className="menu-backdrop"
-          aria-label="Zamknij menu"
+          aria-label={t('Close menu')}
           onClick={() => setMenu(false)}
         />
       )}
@@ -298,13 +317,13 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         <Brand />
         <button
           className="mobile-close icon-button"
-          aria-label="Zamknij menu"
+          aria-label={t('Close menu')}
           onClick={() => setMenu(false)}
         >
           <X />
         </button>
-        <div className="nav-label">MONITOROWANIE</div>
-        <nav aria-label="Menu główne">
+        <div className="nav-label">{t('MONITORING')}</div>
+        <nav aria-label={t('Main menu')}>
           {nav.map((n) => (
             <a
               key={n.path}
@@ -313,9 +332,9 @@ function Shell({ onLogout }: { onLogout: () => void }) {
               aria-current={active === n.path ? 'page' : undefined}
             >
               <n.icon size={19} />
-              {n.label}
+              {t(n.label)}
               {n.path === 'homes' && !!overview.data?.homes.length && (
-                <span className="nav-count">{overview.data.homes.length}</span>
+                <span className="nav-count">{number(overview.data.homes.length, 0)}</span>
               )}
             </a>
           ))}
@@ -323,19 +342,21 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         <div className="sidebar-note">
           <ShieldCheck size={18} />
           <div>
-            <strong>Tylko monitorowanie</strong>
-            <p>Aplikacja nie zmienia ustawień urządzeń.</p>
+            <strong>{t('Monitoring only')}</strong>
+            <p>{t('The app does not change device settings.')}</p>
           </div>
         </div>
         <div className="owner">
-          <span className="avatar">W</span>
+          <span className="avatar" aria-hidden="true">
+            {t('Owner').slice(0, 1)}
+          </span>
           <div>
-            <strong>Właściciel</strong>
-            <small>Prywatny panel</small>
+            <strong>{t('Owner')}</strong>
+            <small>{t('Private dashboard')}</small>
           </div>
           <button
-            title="Wyloguj"
-            aria-label="Wyloguj"
+            title={t('Log out')}
+            aria-label={t('Log out')}
             className="icon-button"
             onClick={async () => {
               try {
@@ -355,27 +376,30 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           <div className="breadcrumb">
             <button
               className="mobile-menu icon-button"
-              aria-label="Otwórz menu"
+              aria-label={t('Open menu')}
               onClick={() => setMenu(true)}
             >
               <Menu size={21} />
             </button>
-            <span>Panel właściciela</span>
+            <span>{t('Owner dashboard')}</span>
             <ChevronRight size={14} />
-            <strong>{title}</strong>
+            <strong>{t(title)}</strong>
           </div>
-          <button
-            className="button secondary compact"
-            onClick={sync}
-            disabled={syncing || settings.data?.syncing}
-          >
-            <RefreshCw size={15} className={syncing || settings.data?.syncing ? 'spin' : ''} />
-            {syncing || settings.data?.syncing ? 'Synchronizacja…' : 'Odśwież dane'}
-          </button>
+          <div className="topbar-actions">
+            <LanguageSwitcher />
+            <button
+              className="button secondary compact"
+              onClick={sync}
+              disabled={syncing || settings.data?.syncing}
+            >
+              <RefreshCw size={15} className={syncing || settings.data?.syncing ? 'spin' : ''} />
+              {syncing || settings.data?.syncing ? t('Syncing…') : t('Refresh data')}
+            </button>
+          </div>
         </div>
         <main className="content" id="main-content">
-          {message && <Notice>{message}</Notice>}
-          {overview.error && <Notice tone="error">{overview.error}</Notice>}
+          {message && <Notice>{t(message)}</Notice>}
+          {overview.error && <Notice tone="error">{t(overview.error)}</Notice>}
           {route === '' &&
             (overview.data ? (
               <Dashboard data={overview.data} days={days} setDays={setDays} />
@@ -385,8 +409,8 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           {route === 'homes' && (
             <>
               <PageTitle
-                title="Mieszkania"
-                subtitle="Każdy dom Tuya ma własne zużycie, historię i reguły alertów."
+                title={t('Apartments')}
+                subtitle={t('Each Tuya home has its own usage, history and alert rules.')}
               />
               {overview.data?.homes.length ? (
                 <div className="home-grid">
@@ -395,10 +419,10 @@ function Shell({ onLogout }: { onLogout: () => void }) {
                   ))}
                 </div>
               ) : (
-                <Empty title="Nie ma jeszcze mieszkań">
-                  Połącz konto, a jego domy pojawią się tutaj.
+                <Empty title={t('No apartments yet')}>
+                  {t('Connect an account to see its apartments here.')}
                   <a className="text-link" href="#accounts">
-                    Przejdź do kont <ChevronRight size={16} />
+                    {t('Go to accounts')} <ChevronRight size={16} />
                   </a>
                 </Empty>
               )}
@@ -413,14 +437,14 @@ function Shell({ onLogout }: { onLogout: () => void }) {
             !['homes', 'accounts', 'alerts', 'settings'].includes(route) &&
             !route.startsWith('home/') &&
             !route.startsWith('device/') && (
-              <Empty title="Nie znaleziono strony">
-                <a href="#">Wróć do przeglądu</a>
+              <Empty title={t('Page not found')}>
+                <a href="#">{t('Back to overview')}</a>
               </Empty>
             )}
         </main>
         <footer className="app-footer">
           <span>Tuya Energy Monitor</span>
-          <span>Europe/Warsaw · Stany co 60 s · Liczniki co 5 min</span>
+          <span>{t('Europe/Warsaw · Status every 60 s · Meters every 5 min')}</span>
         </footer>
       </div>
     </div>

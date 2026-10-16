@@ -105,12 +105,17 @@ export interface EstimationView extends EstimationConfig {
     ratedPowerKw: number | null;
   }[];
 }
+export interface NotificationContent {
+  title: string;
+  body: string;
+}
 export interface NotificationView {
   id: string;
   homeId: string | null;
   kind: string;
   title: string;
   body: string;
+  translations?: { pl: NotificationContent };
   createdAt: number;
   status: string;
   sentAt: number | null;

@@ -370,13 +370,46 @@ nav a.active {
   min-width: 0;
 }
 .topbar {
-  height: 73px;
+  min-height: 73px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 39px;
   background: #ffffffb8;
   border-bottom: 1px solid var(--line);
+  gap: 16px;
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.language-switcher {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.language-switcher select {
+  width: auto;
+  min-width: 91px;
+  min-height: 36px;
+  padding: 7px 10px;
+  font-size: 12px;
+  border: 1px solid #dce2ec;
+  border-radius: 8px;
+  color: #223148;
+  background-color: white;
+}
+.language-switcher select:focus-visible {
+  border-color: var(--blue);
+  outline: 2px solid #e3ebff;
 }
 .breadcrumb {
   display: flex;
@@ -1134,10 +1167,16 @@ nav a.active {
   background: #ffffff45;
 }
 .login-main {
+  position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
   padding: 45px;
+}
+.login-language {
+  position: absolute;
+  top: 24px;
+  right: 28px;
 }
 .login-form {
   width: 100%;
@@ -1367,8 +1406,23 @@ nav a.active {
     z-index: 19;
   }
   .topbar {
-    height: 62px;
-    padding: 0 18px;
+    min-height: 62px;
+    padding: 12px 18px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .topbar-actions {
+    flex: 1;
+    gap: 8px;
+  }
+  .language-switcher > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   .breadcrumb {
     gap: 7px;
@@ -1558,7 +1612,7 @@ nav a.active {
     font-size: 20px;
   }
   .login-main {
-    padding: 45px 28px;
+    padding: 76px 28px 45px;
   }
   .login-form {
     max-width: 380px;
