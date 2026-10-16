@@ -103,13 +103,20 @@ export function recordHeatingState(
     transaction(db, () => recordHeatingState(db, id, input, online, now));
     return;
   }
-  const fields = statusFieldsSchema.parse(input);
+  let fields = statusFieldsSchema.parse(input);
   const d = db.prepare('SELECT * FROM devices WHERE id=?').get(id) as Row | undefined;
   if (!d || (d.status_updated_at !== null && now <= d.status_updated_at)) return;
   const previous = db
     .prepare('SELECT * FROM heating_observations WHERE device_id=? ORDER BY at DESC LIMIT 1')
     .get(id) as Row | undefined;
   if (previous && now <= previous.at) return;
+  const oldFields: StatusField[] = JSON.parse(d.status_fields);
+  fields = fields.map((field) => {
+    const old = oldFields.find(
+      (prior) => prior.code === field.code && typeof prior.value === typeof field.value,
+    );
+    return field.values === undefined && old?.values ? { ...field, values: old.values } : field;
+  });
   db.prepare('UPDATE devices SET status_fields=?,status_updated_at=? WHERE id=?').run(
     JSON.stringify(fields),
     now,

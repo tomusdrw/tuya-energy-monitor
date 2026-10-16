@@ -15,6 +15,7 @@ const config: Config = {
   port: 3000,
   host: '127.0.0.1',
   pollSeconds: 300,
+  statusPollSeconds: 60,
   resendKey: '',
   emailFrom: '',
   emailTo: '',

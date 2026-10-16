@@ -46,3 +46,39 @@ class DeviceTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class StatusTests(unittest.TestCase):
+    def test_status_fields_preserve_typed_values_and_enum_choices_without_scaling_relay(self):
+        device = {'id': 'd', 'online': True, 'status': [
+            {'code': 'work_state', 'value': 'heating'}, {'code': 'relay_state', 'value': True},
+            {'code': 'relay_number', 'value': 1}, {'code': 'temp_current', 'value': 220}]}
+        specification = {'status': [
+            {'code': 'work_state', 'type': 'Enum', 'values': '{"range":["heating","standby"]}'},
+            {'code': 'relay_state', 'type': 'Boolean', 'values': '{}'},
+            {'code': 'relay_number', 'type': 'Integer', 'values': '{"scale":1}'}]}
+        result = normalize_device(device, specification, [])['statusFields']
+        self.assertIn({'code': 'work_state', 'value': 'heating', 'values': ['heating', 'standby']}, result)
+        self.assertIn({'code': 'relay_state', 'value': True, 'values': [True, False]}, result)
+        self.assertIn({'code': 'relay_number', 'value': 1}, result)
+
+    def test_raw_status_never_exposes_credentials_binary_or_complex_values(self):
+        from tuya import status_fields
+        fields = [{'code': code, 'value': value} for code, value in [
+            ('local_key', 'hidden'), ('wifi_password', 'hidden'), ('access_token', 'hidden'),
+            ('program', {'secret': 'hidden'}), ('blob', ['hidden']), ('invalid', float('nan')),
+            ('raw', 'x' * 300), ('work_state', 'idle')]]
+        result = status_fields({'status': fields}, {})
+        self.assertEqual(result, [{'code': 'work_state', 'value': 'idle'}])
+
+    def test_fast_reads_batch_twenty_ids_without_requesting_schemas_or_inventing_absent_devices(self):
+        from tuya import read_states
+        calls = []
+        def get(path, params):
+            calls.append((path, params))
+            return [{'id': params['devIds'].split(',')[0], 'online': True,
+                     'status': [{'code': 'work_state', 'value': 'heat'}]}]
+        result = read_states(get, [str(i) for i in range(43)])
+        self.assertEqual([len(params['devIds'].split(',')) for _, params in calls], [20, 20, 3])
+        self.assertTrue(all(path == '/v1.0/m/life/ha/devices/detail' for path, _ in calls))
+        self.assertEqual([d['id'] for d in result], ['0', '20', '40'])
+        self.assertEqual(result[0]['statusFields'], [{'code': 'work_state', 'value': 'heat'}])

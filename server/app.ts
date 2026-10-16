@@ -209,6 +209,7 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
   app.get('/api/settings', async () => ({
     timezone: TIMEZONE,
     pollSeconds: config.pollSeconds,
+    statusPollSeconds: config.statusPollSeconds,
     origin: config.origin,
     emailConfigured: emailConfigured(config),
     emailFrom: config.emailFrom || null,

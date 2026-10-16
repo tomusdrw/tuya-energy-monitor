@@ -258,3 +258,29 @@ test('apartment totals sum each device once and preserve both source components'
   assert.equal(stats.estimated, 1);
   f.db.close();
 });
+
+test('fast states retain known enum choices but never retain a missing relay value', () => {
+  const f = estimationFixture();
+  configureEstimation(f.db, f.id, settings, f.start);
+  recordHeatingState(
+    f.db,
+    f.id,
+    [{ code: 'work_state', value: 'heating', values: ['heating', 'standby'] }],
+    true,
+    f.start + minute,
+  );
+  f.sample(f.start + 2 * minute);
+  assert.deepEqual(getDevice(f.db, f.id, f.start + 2 * minute)?.estimation.statusFields[0].values, [
+    'heating',
+    'standby',
+  ]);
+  recordHeatingState(f.db, f.id, [{ code: 'switch', value: true }], true, f.start + 3 * minute);
+  const detail = getDevice(f.db, f.id, f.start + 3 * minute)!;
+  assert.equal(detail.estimation.state, 'unknown');
+  assert.equal(detail.estimation.suggestion, null);
+  assert.deepEqual(
+    detail.estimation.statusFields.map((field) => field.code),
+    ['switch'],
+  );
+  f.db.close();
+});

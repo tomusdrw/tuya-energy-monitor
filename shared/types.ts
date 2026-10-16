@@ -126,6 +126,7 @@ export interface Overview {
 export interface SettingsView {
   timezone: string;
   pollSeconds: number;
+  statusPollSeconds: number;
   origin: string;
   emailConfigured: boolean;
   emailFrom: string | null;

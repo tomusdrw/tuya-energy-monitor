@@ -15,6 +15,7 @@ const config: Config = {
   host: '127.0.0.1',
   port: 3000,
   pollSeconds: 300,
+  statusPollSeconds: 60,
   resendKey: 'fake-key',
   emailFrom: 'energy@example.com',
   emailTo: 'owner@example.com',

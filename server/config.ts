@@ -9,6 +9,7 @@ export interface Config {
   host: string;
   port: number;
   pollSeconds: number;
+  statusPollSeconds: number;
   resendKey: string;
   emailFrom: string;
   emailTo: string;
@@ -41,6 +42,7 @@ export function loadConfig(env = process.env): Config {
     host: env.HOST ?? '0.0.0.0',
     port,
     pollSeconds: 300,
+    statusPollSeconds: 60,
     resendKey: env.RESEND_API_KEY ?? '',
     emailFrom: env.EMAIL_FROM ?? '',
     emailTo: env.EMAIL_TO ?? '',
