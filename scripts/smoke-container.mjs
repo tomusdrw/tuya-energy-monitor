@@ -21,8 +21,7 @@ writeFileSync(
 );
 try {
   docker('run', '-d', '--name', container, '--env-file', envFile, '-p', '127.0.0.1::3000', image);
-  const address = docker('port', container, '3000/tcp');
-  const base = `http://${address}`;
+  let base = `http://${docker('port', container, '3000/tcp')}`;
   async function ready() {
     for (let attempt = 0; attempt < 60; attempt++) {
       try {
@@ -36,6 +35,7 @@ try {
   assert.equal(docker('exec', container, 'id', '-u'), '1000');
   assert.equal((await fetch(`${base}/`)).status, 200);
   assert.equal((await fetch(`${base}/api/overview`)).status, 401);
+  assert.equal((await fetch(`${base}/%61pi/overview`)).status, 401);
   const login = await fetch(`${base}/api/auth/login`, {
     method: 'POST',
     headers: { origin, 'Content-Type': 'application/json' },
@@ -55,6 +55,7 @@ try {
     403,
   );
   docker('restart', container);
+  base = `http://${docker('port', container, '3000/tcp')}`;
   await ready();
   const persisted = await fetch(`${base}/api/overview`, { headers: { cookie } });
   assert.equal(

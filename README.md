@@ -83,12 +83,16 @@ visible in **Powiadomienia** and nothing is sent.
 
 Daily threshold alerts evaluate after collection and are limited to one per
 apartment per Warsaw date. Partial sums may trigger a threshold and are clearly
-labelled. The message includes the limit, device contributions and a direct link.
+labelled. The preceding day is also checked so a reading that straddles midnight
+can still trigger its alert. The message includes the date, limit, device
+contributions and a direct link.
 
 Anomalies default to a 14-day window, a 50% increase and at least 3 kWh extra.
 Both conditions must hold. At least seven prior days and today's elapsed period
-must have 95% coverage for the same metered devices. The comparison uses the
-same local time of day and begins after 30 minutes. A new meter or data gap can
+must have 95% coverage **for every compared meter**. The comparison uses the
+same local time of day and begins after 30 minutes. Windows with different actual
+durations across a daylight-saving change are excluded; this can suspend anomaly
+detection on the transition day. A new meter or data gap can
 delay the baseline; lack of an alert does not establish normal consumption.
 
 Weekly summaries are due Monday after 08:00 Europe/Warsaw, with catch-up after

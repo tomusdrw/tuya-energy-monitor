@@ -231,9 +231,9 @@ export function HomePage({ id }: { id: string }) {
                     <small>
                       {!d.included
                         ? 'Poza sumą mieszkania'
-                        : d.online && d.present
+                        : d.fresh
                           ? 'Online'
-                          : 'Offline lub niedostępne'}
+                          : 'Offline lub nieaktualne odczyty'}
                     </small>
                   </div>
                 </div>
@@ -292,8 +292,8 @@ export function DevicePage({ id }: { id: string }) {
         title={device.name}
         subtitle={`${device.homeName} · ostatni odczyt chmury: ${date(device.lastSeen)}`}
       >
-        <Badge tone={device.online && device.present ? 'success' : 'warning'}>
-          {device.online && device.present ? 'Online' : 'Niedostępne'}
+        <Badge tone={device.fresh ? 'success' : 'warning'}>
+          {device.fresh ? 'Online' : 'Offline lub nieaktualne odczyty'}
         </Badge>
       </PageTitle>
       {notice && <Notice tone="error">{notice}</Notice>}
@@ -509,8 +509,14 @@ export function AccountsPage() {
                 <span className="account-icon">
                   <Link2 size={23} />
                 </span>
-                <Badge tone={a.error ? 'danger' : a.lastSync ? 'success' : 'warning'}>
-                  {a.error ? 'Wymaga uwagi' : a.lastSync ? 'Połączone' : 'Pierwszy odczyt'}
+                <Badge tone={a.error ? 'danger' : a.healthy ? 'success' : 'warning'}>
+                  {a.error
+                    ? 'Wymaga uwagi'
+                    : a.healthy
+                      ? 'Połączone'
+                      : a.lastSync
+                        ? 'Nieaktualne odczyty'
+                        : 'Pierwszy odczyt'}
                 </Badge>
               </div>
               <h2>{a.label}</h2>

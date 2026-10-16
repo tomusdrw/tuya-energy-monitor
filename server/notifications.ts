@@ -36,74 +36,91 @@ function enqueue(
 
 export function evaluateNotifications(db: DatabaseSync, now: number): void {
   const overview = getOverview(db, now, 1);
-  const today = localDate(now),
-    start = dayBounds(today).start;
+  const today = localDate(now);
   const local = Temporal.Instant.fromEpochMilliseconds(now).toZonedDateTimeISO(TIMEZONE);
   for (const home of overview.homes) {
     const selected = devicesFor(db, home.id).filter((d) => d.included);
-    const contributors = selected
-      .map((d) => ({ name: d.name, kwh: usage(db, [d], start, now, now).kwh }))
-      .filter((d) => d.kwh !== null)
-      .sort((a, b) => b.kwh! - a.kwh!)
-      .slice(0, 5)
-      .map((d) => `• ${d.name}: ${format(d.kwh)}`)
-      .join('\n');
-    const details =
-      `Mieszkanie: ${home.name}\nDzień: ${today}\nZaobserwowane zużycie: ${format(home.stats.kwh)}\n` +
-      `Zakres: ${home.stats.metered}/${home.stats.monitored} urządzeń z licznikiem; pokrycie czasu ${coverage(home.stats.coverage)}.\n` +
-      (home.stats.complete ? '' : 'Suma częściowa. Brakujące pomiary nie są zerowym zużyciem.\n') +
-      `\nNajwiększy udział w sumie:\n${contributors || 'Brak dostępnych odczytów.'}`;
-    if (
-      home.rules.dailyLimit !== null &&
-      home.stats.kwh !== null &&
-      home.stats.kwh >= home.rules.dailyLimit
-    ) {
-      enqueue(
-        db,
-        `threshold/${home.id}/${today}`,
-        home.id,
-        'threshold',
-        `Próg energii: ${home.name}`,
-        `${details}\n\nPrzekroczony próg dzienny: ${format(home.rules.dailyLimit)}.`,
-        now,
-      );
-    }
-    const meters = selected.filter((d) => d.energy_kind === 'cumulative');
-    const current = usage(db, meters, start, now, now);
-    if (
-      !home.rules.anomalyEnabled ||
-      !meters.length ||
-      now - start < 30 * 60000 ||
-      !current.complete ||
-      current.kwh === null
-    )
-      continue;
-    const comparable: number[] = [];
-    for (let offset = 1; offset <= home.rules.windowDays; offset++) {
-      const day = previousDate(today, offset);
-      const comparisonEnd = Temporal.PlainDate.from(day).toZonedDateTime({
-        timeZone: TIMEZONE,
-        plainTime: local.toPlainTime(),
-      }).epochMilliseconds;
-      const prior = usage(db, meters, dayBounds(day).start, comparisonEnd, now);
-      if (prior.coverage >= 0.95 && prior.kwh !== null) comparable.push(prior.kwh);
-    }
-    if (comparable.length < 7) continue;
-    const average = comparable.reduce((sum, value) => sum + value, 0) / comparable.length;
-    if (
-      current.kwh >= average * (1 + home.rules.increasePercent / 100) &&
-      current.kwh - average >= home.rules.increaseKwh
-    ) {
-      enqueue(
-        db,
-        `anomaly/${home.id}/${today}`,
-        home.id,
-        'anomaly',
-        `Nietypowe zużycie: ${home.name}`,
-        `${details}\n\nŚrednia do tej samej pory: ${format(average)} (${comparable.length} porównywalnych dni).\n` +
-          `Warunki: wzrost o co najmniej ${home.rules.increasePercent}% i ${format(home.rules.increaseKwh)}.`,
-        now,
-      );
+    // The first sample after midnight can still complete the preceding day.
+    for (const day of [previousDate(today, 1), today]) {
+      const bounds = dayBounds(day);
+      const start = bounds.start,
+        end = Math.min(bounds.end, now);
+      const stats = usage(db, selected, start, end, now);
+      const contributors = selected
+        .map((d) => ({ name: d.name, kwh: usage(db, [d], start, end, now).kwh }))
+        .filter((d) => d.kwh !== null)
+        .sort((a, b) => b.kwh! - a.kwh!)
+        .slice(0, 5)
+        .map((d) => `• ${d.name}: ${format(d.kwh)}`)
+        .join('\n');
+      const details =
+        `Mieszkanie: ${home.name}\nDzień: ${day}\nZaobserwowane zużycie: ${format(stats.kwh)}\n` +
+        `Zakres: ${stats.metered}/${stats.monitored} urządzeń z licznikiem; pokrycie czasu ${coverage(stats.coverage)}.\n` +
+        (stats.complete ? '' : 'Suma częściowa. Brakujące pomiary nie są zerowym zużyciem.\n') +
+        `\nNajwiększy udział w sumie:\n${contributors || 'Brak dostępnych odczytów.'}`;
+      if (
+        home.rules.dailyLimit !== null &&
+        stats.kwh !== null &&
+        stats.kwh >= home.rules.dailyLimit
+      ) {
+        enqueue(
+          db,
+          `threshold/${home.id}/${day}`,
+          home.id,
+          'threshold',
+          `Próg energii: ${home.name}`,
+          `${details}\n\nPrzekroczony próg dzienny: ${format(home.rules.dailyLimit)}.`,
+          now,
+        );
+      }
+      const meters = selected.filter((d) => d.energy_kind === 'cumulative');
+      const everyMeterCovered = (from: number, to: number) =>
+        meters.every((meter) => usage(db, [meter], from, to, now).coverage >= 0.95);
+      const current = usage(db, meters, start, end, now);
+      if (
+        !home.rules.anomalyEnabled ||
+        !meters.length ||
+        end - start < 30 * 60000 ||
+        !current.complete ||
+        !everyMeterCovered(start, end) ||
+        current.kwh === null
+      )
+        continue;
+      const comparable: number[] = [];
+      for (let offset = 1; offset <= home.rules.windowDays; offset++) {
+        const priorDay = previousDate(day, offset);
+        const priorBounds = dayBounds(priorDay);
+        const comparisonEnd =
+          day !== today
+            ? priorBounds.end
+            : Temporal.PlainDate.from(priorDay).toZonedDateTime({
+                timeZone: TIMEZONE,
+                plainTime: local.toPlainTime(),
+              }).epochMilliseconds;
+        // Equal wall-clock cutoffs can span different durations across a DST change.
+        // Such days are not comparable; do not manufacture a rate-adjusted baseline.
+        if (comparisonEnd - priorBounds.start !== end - start) continue;
+        const prior = usage(db, meters, priorBounds.start, comparisonEnd, now);
+        if (prior.kwh !== null && everyMeterCovered(priorBounds.start, comparisonEnd))
+          comparable.push(prior.kwh);
+      }
+      if (comparable.length < 7) continue;
+      const average = comparable.reduce((sum, value) => sum + value, 0) / comparable.length;
+      if (
+        current.kwh >= average * (1 + home.rules.increasePercent / 100) &&
+        current.kwh - average >= home.rules.increaseKwh
+      ) {
+        enqueue(
+          db,
+          `anomaly/${home.id}/${day}`,
+          home.id,
+          'anomaly',
+          `Nietypowe zużycie: ${home.name}`,
+          `${details}\n\nŚrednia do tej samej pory: ${format(average)} (${comparable.length} porównywalnych dni).\n` +
+            `Warunki: wzrost o co najmniej ${home.rules.increasePercent}% i ${format(home.rules.increaseKwh)}.`,
+          now,
+        );
+      }
     }
   }
 
@@ -134,7 +151,7 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
   const stale = monitored.filter(
     (d) => !d.online || !d.present || now - (d.last_seen ?? 0) > MAX_GAP,
   );
-  const accountHealth = accounts(db)
+  const accountHealth = accounts(db, now)
     .map(
       (a) =>
         `${a.label}: ${a.error || (a.lastSync && now - a.lastSync <= MAX_GAP ? 'odczyt działa' : 'odczyty nieaktualne')}`,

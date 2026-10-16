@@ -33,6 +33,74 @@ async function setup() {
   return { db, app, login };
 }
 
+test('encoded API paths enforce authentication and origin checks on the matched route', async () => {
+  const { db, app, login } = await setup();
+  try {
+    db.prepare('INSERT INTO accounts(id,label,secret) VALUES(?,?,?)').run('a', 'Account', 'unused');
+    ingestSnapshot(
+      db,
+      'a',
+      { homes: [{ id: 'h', name: 'Private home', devices: [] }] },
+      Date.now(),
+    );
+    const home = (db.prepare('SELECT id FROM homes').get() as { id: string }).id;
+    const payload = {
+      dailyLimit: 123,
+      anomalyEnabled: true,
+      windowDays: 14,
+      increasePercent: 50,
+      increaseKwh: 3,
+    };
+    for (const prefix of ['/%61pi', '/a%70i', '/%61%70%69']) {
+      const read = await app.inject(`${prefix}/overview`);
+      assert.equal(read.statusCode, 401, `${prefix} must not expose readings anonymously`);
+      assert.ok(!read.body.includes('Private home'));
+      assert.equal(
+        (
+          await app.inject({
+            method: 'PUT',
+            url: `${prefix}/homes/${home}/rules`,
+            headers: { origin: config.origin },
+            payload,
+          })
+        ).statusCode,
+        401,
+      );
+    }
+    const response = await login();
+    const cookie = String(response.headers['set-cookie']).split(';')[0];
+    assert.equal(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: `/%61pi/homes/${home}/rules`,
+          headers: { cookie, origin: 'https://evil.example' },
+          payload,
+        })
+      ).statusCode,
+      403,
+    );
+    assert.equal((db.prepare('SELECT daily_limit FROM homes').get() as any).daily_limit, null);
+    assert.equal(
+      (await app.inject({ url: '/%61pi/overview', headers: { cookie } })).statusCode,
+      200,
+    );
+    assert.equal(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/%61pi/auth/login',
+          headers: { origin: config.origin },
+          payload: { password: config.password },
+        })
+      ).statusCode,
+      200,
+    );
+  } finally {
+    await app.close();
+  }
+});
+
 test('private readings require authentication; correct password sets secure session semantics', async () => {
   const { app, login } = await setup();
   assert.equal((await app.inject('/api/overview')).statusCode, 401);

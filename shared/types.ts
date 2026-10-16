@@ -23,6 +23,7 @@ export interface AccountView {
   label: string;
   lastSync: number | null;
   error: string | null;
+  healthy: boolean;
   homeCount: number;
   deviceCount: number;
 }
@@ -34,6 +35,7 @@ export interface DeviceView {
   included: boolean;
   online: boolean;
   present: boolean;
+  fresh: boolean;
   lastSeen: number | null;
   energyKind: string;
   energyCode: string | null;

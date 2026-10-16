@@ -80,6 +80,55 @@ test('daily threshold produces one durable event per home and calendar day with 
   f.db.close();
 });
 
+test('a reading after midnight can complete yesterday and trigger its daily threshold once', () => {
+  const f = fixture();
+  const beforeMidnight = Date.parse('2026-10-16T21:59:00Z');
+  const afterMidnight = Date.parse('2026-10-16T22:04:00Z');
+  f.interval('2026-10-16', 9.5, beforeMidnight);
+  f.db.prepare('UPDATE homes SET daily_limit=10,anomaly_enabled=0').run();
+  evaluateNotifications(f.db, beforeMidnight);
+  assert.equal(f.db.prepare("SELECT id FROM notifications WHERE kind='threshold'").all().length, 0);
+  // The five-minute delta contributes 0.6 kWh to yesterday and 2.4 kWh to today.
+  f.db
+    .prepare('INSERT INTO intervals(device_id,start,end,kwh) VALUES(?,?,?,?)')
+    .run(f.device, beforeMidnight, afterMidnight, 3);
+  evaluateNotifications(f.db, afterMidnight);
+  evaluateNotifications(f.db, afterMidnight + 300000);
+  const events = f.db.prepare("SELECT * FROM notifications WHERE kind='threshold'").all() as any[];
+  assert.equal(events.length, 1);
+  assert.equal(events[0].id, `threshold/${f.home}/2026-10-16`);
+  assert.match(events[0].body, /10,10 kWh/);
+  assert.match(events[0].body, /Dzień: 2026-10-16/);
+  f.db.close();
+});
+
+test('constant power across the repeated DST hour does not cause an anomaly', () => {
+  const f = fixture();
+  const repeatedTwoAm = Date.parse('2026-10-25T01:00:00Z');
+  f.db.prepare('UPDATE devices SET last_seen=?').run(repeatedTwoAm);
+  for (let day = 11; day <= 24; day++) f.interval(`2026-10-${day}`, 72); // 3 kW all day.
+  f.interval('2026-10-25', 9, repeatedTwoAm); // Three elapsed hours since Warsaw midnight.
+  evaluateNotifications(f.db, repeatedTwoAm);
+  assert.equal(f.db.prepare("SELECT id FROM notifications WHERE kind='anomaly'").all().length, 0);
+  f.db.close();
+});
+
+test('the shortened spring DST day cannot lower the baseline and manufacture an anomaly', () => {
+  const f = fixture();
+  const afterSpringChange = Date.parse('2026-03-30T02:00:00Z'); // 04:00 Warsaw.
+  f.db.prepare('UPDATE devices SET last_seen=?').run(afterSpringChange);
+  f.db.prepare('UPDATE homes SET increase_percent=1,increase_kwh=0.1').run();
+  for (let day = 16; day <= 29; day++) {
+    const date = `2026-03-${day}`;
+    const bounds = dayBounds(date);
+    f.interval(date, ((bounds.end - bounds.start) / 3600000) * 3);
+  }
+  f.interval('2026-03-30', 12, afterSpringChange);
+  evaluateNotifications(f.db, afterSpringChange);
+  assert.equal(f.db.prepare("SELECT id FROM notifications WHERE kind='anomaly'").all().length, 0);
+  f.db.close();
+});
+
 test('anomaly compares the same portion of the previous seven complete days', () => {
   const f = fixture();
   for (let day = 9; day <= 15; day++) f.interval(`2026-10-${String(day).padStart(2, '0')}`, 8); // 4 kWh to noon.
@@ -106,6 +155,46 @@ test('new meter without matching history prevents a false anomaly', () => {
     .run('new', dayBounds('2026-10-16').start, now, 5);
   evaluateNotifications(f.db, now);
   assert.equal(f.db.prepare("SELECT * FROM notifications WHERE kind='anomaly'").all().length, 0);
+  f.db.close();
+});
+
+test('every meter needs history even when one missing meter is only 5% of the apartment', () => {
+  const f = fixture();
+  f.db.prepare('DELETE FROM readings').run();
+  f.db.prepare('DELETE FROM devices').run();
+  for (let meter = 0; meter < 20; meter++) {
+    const id = `meter-${meter}`;
+    f.db
+      .prepare(
+        `INSERT INTO devices(id,home_id,remote_id,name,category,included,online,last_seen,energy_kind)
+      VALUES(?,?,?,?,'wk',1,1,?,'cumulative')`,
+      )
+      .run(id, f.home, id, id, now);
+    f.db
+      .prepare('INSERT INTO intervals(device_id,start,end,kwh) VALUES(?,?,?,?)')
+      .run(id, dayBounds('2026-10-16').start, now, meter === 19 ? 60 : 1.2);
+    if (meter === 19) continue; // Newly installed, fully observed today but with no baseline.
+    for (let day = 9; day <= 15; day++) {
+      const bounds = dayBounds(`2026-10-${String(day).padStart(2, '0')}`);
+      f.db
+        .prepare('INSERT INTO intervals(device_id,start,end,kwh) VALUES(?,?,?,?)')
+        .run(id, bounds.start, bounds.end, 2.4);
+    }
+  }
+  evaluateNotifications(f.db, now);
+  assert.equal(f.db.prepare("SELECT id FROM notifications WHERE kind='anomaly'").all().length, 0);
+  // Adequate baseline is also insufficient when today's missing data is hidden in the average.
+  for (let day = 9; day <= 15; day++) {
+    const bounds = dayBounds(`2026-10-${String(day).padStart(2, '0')}`);
+    f.db
+      .prepare('INSERT INTO intervals(device_id,start,end,kwh) VALUES(?,?,?,?)')
+      .run('meter-19', bounds.start, bounds.end, 2.4);
+  }
+  f.db
+    .prepare('UPDATE intervals SET start=? WHERE device_id=? AND end=?')
+    .run(now - 300000, 'meter-19', now);
+  evaluateNotifications(f.db, now);
+  assert.equal(f.db.prepare("SELECT id FROM notifications WHERE kind='anomaly'").all().length, 0);
   f.db.close();
 });
 

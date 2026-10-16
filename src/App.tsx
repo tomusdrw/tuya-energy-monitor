@@ -106,7 +106,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
   );
 }
 
-function Dashboard({
+export function Dashboard({
   data,
   days,
   setDays,
@@ -140,6 +140,19 @@ function Dashboard({
         </div>
       ) : (
         <>
+          {data.accounts
+            .filter((account) => !account.healthy)
+            .map((account) => (
+              <Notice key={account.id} tone="warning">
+                <strong>Konto {account.label} wymaga uwagi.</strong>{' '}
+                {account.error ??
+                  (account.lastSync === null
+                    ? 'Czekamy na pierwszy odczyt mieszkań i urządzeń.'
+                    : 'Odczyty z tego konta są nieaktualne.')}{' '}
+                Suma może nie obejmować wszystkich mieszkań.{' '}
+                <a href="#accounts">Sprawdź połączenie</a>
+              </Notice>
+            ))}
           <div className="stats-grid">
             <div className="stat featured">
               <span>Zaobserwowane dzisiaj</span>
@@ -151,7 +164,10 @@ function Dashboard({
             <div className="stat">
               <span>Monitorowane mieszkania</span>
               <strong>{data.homes.length.toString().padStart(2, '0')}</strong>
-              <p>{data.accounts.length} połączone konta Tuya</p>
+              <p>
+                Aktualne konta: {data.accounts.filter((account) => account.healthy).length} /{' '}
+                {data.accounts.length}
+              </p>
             </div>
             <div className="stat">
               <span>Urządzenia z licznikiem</span>

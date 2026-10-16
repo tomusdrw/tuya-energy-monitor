@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { openDatabase } from '../server/db.js';
-import { ingestSnapshot, getOverview, dayBounds } from '../server/energy.js';
+import { ingestSnapshot, getOverview, getDevice, dayBounds } from '../server/energy.js';
 import { encrypt, decrypt } from '../server/crypto.js';
 
 function fixture() {
@@ -81,6 +81,36 @@ test('unsupported thermostats stay missing, and zero requires two valid readings
   f.db.close();
 });
 
+test('a failed or uncollected account makes the combined total incomplete even with full known meter coverage', () => {
+  const f = fixture();
+  const start = dayBounds('2026-10-16').start;
+  f.sample(start, 10);
+  f.sample(start + 300000, 10);
+  assert.equal(getOverview(f.db, start + 300000).stats.complete, true);
+  f.db
+    .prepare('INSERT INTO accounts(id,label,secret,error) VALUES(?,?,?,?)')
+    .run('b', 'Uncollected apartment', 'unused', 'Connection failed');
+  for (const error of ['Connection failed', null]) {
+    f.db.prepare('UPDATE accounts SET error=? WHERE id=?').run(error, 'b');
+    const overview = getOverview(f.db, start + 300000);
+    assert.equal(overview.stats.kwh, 0);
+    assert.equal(overview.stats.complete, false);
+    assert.equal(overview.accounts.find((a) => a.id === 'b')?.healthy, false);
+  }
+  f.db.close();
+});
+
+test('device health expires even when the last cloud status was online', () => {
+  const f = fixture();
+  f.sample(f.start, 10);
+  const id = (f.db.prepare('SELECT id FROM devices').get() as any).id;
+  assert.equal(getDevice(f.db, id, f.start)?.fresh, true);
+  const stale = getDevice(f.db, id, f.start + 16 * 60000);
+  assert.equal(stale?.online, true);
+  assert.equal(stale?.fresh, false);
+  f.db.close();
+});
+
 test('interval straddling Warsaw midnight is proportionally attributed to each date', () => {
   const f = fixture();
   const t = Date.parse('2026-10-15T21:55:00Z');
@@ -113,6 +143,11 @@ test('failed/missing snapshot devices retain an explicit gap, including previous
   const overview = getOverview(f.db, f.start + 600000, 7);
   assert.equal(overview.homes[0].stats.monitored, 1);
   assert.equal(overview.homes[0].stats.fresh, 0);
+  // Returning within MAX_GAP must not fill the known missing poll with invented coverage.
+  f.sample(f.start + 900000, 12);
+  assert.equal(f.today(f.start + 900000).stats.kwh, 1);
+  f.sample(f.start + 1200000, 12.5);
+  assert.equal(f.today(f.start + 1200000).stats.kwh, 1.5);
   f.db.close();
 });
 

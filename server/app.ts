@@ -99,25 +99,24 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
       'Content-Security-Policy',
       "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
     );
-    const pathname = request.url.split('?')[0];
-    if (!pathname.startsWith('/api/')) return;
+    // Protect the matched route: the router accepts percent-encoded static segments.
+    const route = request.routeOptions.url;
+    if (!route?.startsWith('/api/')) return;
     reply.header('Cache-Control', 'no-store');
     if (!['GET', 'HEAD'].includes(request.method) && request.headers.origin !== config.origin)
       return reply
         .code(403)
         .send({ error: 'Żądanie musi pochodzić z adresu aplikacji (APP_ORIGIN).' });
-    if (pathname === '/api/auth' || pathname === '/api/auth/login') return;
+    if (route === '/api/auth' || route === '/api/auth/login') return;
     if (!authenticated(request.cookies.tem_session))
       return reply.code(401).send({ error: 'Zaloguj się, aby kontynuować.' });
   });
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof ZodError)
-      return reply
-        .code(400)
-        .send({
-          error: 'Sprawdź wartości w formularzu.',
-          fields: error.issues.map((i) => i.path.join('.')),
-        });
+      return reply.code(400).send({
+        error: 'Sprawdź wartości w formularzu.',
+        fields: error.issues.map((i) => i.path.join('.')),
+      });
     const status = Number((error as any).statusCode);
     if (status === 429)
       return reply.code(429).send({ error: 'Zbyt wiele prób. Spróbuj ponownie za minutę.' });
@@ -258,11 +257,9 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
           }),
         };
       } catch {
-        return reply
-          .code(502)
-          .send({
-            error: 'Nie udało się wygenerować QR. Sprawdź kod użytkownika i spróbuj ponownie.',
-          });
+        return reply.code(502).send({
+          error: 'Nie udało się wygenerować QR. Sprawdź kod użytkownika i spróbuj ponownie.',
+        });
       }
     },
   );
@@ -277,12 +274,10 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
       try {
         const response = await tuya('confirm', { userCode: flow.userCode, qrcode: flow.qrcode });
         if (!response.ok)
-          return reply
-            .code(409)
-            .send({
-              error:
-                'Zeskanuj QR i zatwierdź połączenie w aplikacji. Jeśli kod wygasł, wygeneruj nowy.',
-            });
+          return reply.code(409).send({
+            error:
+              'Zeskanuj QR i zatwierdź połączenie w aplikacji. Jeśli kod wygasł, wygeneruj nowy.',
+          });
         const session = sessionSchema.parse(response.session);
         const identity = digest(session.token_info.uid);
         if (flow.accountId) {
@@ -290,11 +285,9 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
             .prepare('SELECT identity FROM accounts WHERE id=?')
             .get(flow.accountId) as { identity: string };
           if (existing.identity !== identity)
-            return reply
-              .code(409)
-              .send({
-                error: 'To inne konto Tuya. Zaloguj właściwe konto lub dodaj je jako nowe.',
-              });
+            return reply.code(409).send({
+              error: 'To inne konto Tuya. Zaloguj właściwe konto lub dodaj je jako nowe.',
+            });
         }
         db.prepare(
           `INSERT INTO accounts(id,label,identity,secret) VALUES(?,?,?,?)

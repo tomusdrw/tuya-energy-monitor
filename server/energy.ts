@@ -132,6 +132,14 @@ export function ingestSnapshot(
         }
       }
     }
+    // A disappeared device is a known gap, even if it returns before MAX_GAP.
+    // Keep last_seen unchanged: it records the last actual device observation.
+    db.prepare(
+      `INSERT INTO readings(device_id,at,counter_kwh,code,online)
+      SELECT d.id,?,NULL,NULL,0 FROM devices d JOIN homes h ON h.id=d.home_id
+      WHERE h.account_id=? AND d.present=0
+      AND NOT EXISTS (SELECT 1 FROM readings r WHERE r.device_id=d.id AND r.at>=?)`,
+    ).run(now, accountId, now);
     db.prepare('UPDATE accounts SET last_sync=?,error=NULL WHERE id=?').run(now, accountId);
   });
 }
@@ -192,7 +200,7 @@ function history(db: DatabaseSync, devices: Row[], now: number, days: number): H
   });
 }
 
-export function accounts(db: DatabaseSync): AccountView[] {
+export function accounts(db: DatabaseSync, now = Date.now()): AccountView[] {
   return (
     db
       .prepare(
@@ -207,6 +215,7 @@ export function accounts(db: DatabaseSync): AccountView[] {
     label: a.label,
     lastSync: a.last_sync,
     error: a.error,
+    healthy: !a.error && a.last_sync !== null && now - a.last_sync <= MAX_GAP,
     homeCount: a.home_count,
     deviceCount: a.device_count,
   }));
@@ -256,6 +265,7 @@ function deviceView(db: DatabaseSync, d: Row, now: number): DeviceView {
     included: Boolean(d.included),
     online: Boolean(d.online),
     present: Boolean(d.present),
+    fresh: Boolean(d.online && d.present && d.last_seen !== null && now - d.last_seen <= MAX_GAP),
     lastSeen: d.last_seen,
     energyKind: d.energy_kind,
     energyCode: d.energy_code,
@@ -273,12 +283,15 @@ export function getOverview(db: DatabaseSync, now: number, days = 14): Overview 
     )
     .all() as Row[];
   const devices = devicesFor(db);
+  const accountViews = accounts(db, now);
+  const stats = usage(db, devices, dayBounds(localDate(now)).start, now, now);
+  stats.complete = stats.complete && accountViews.every((account) => account.healthy);
   return {
     now,
     timezone: TIMEZONE,
     homes: homes.map((h) => homeView(db, h, now)),
-    accounts: accounts(db),
-    stats: usage(db, devices, dayBounds(localDate(now)).start, now, now),
+    accounts: accountViews,
+    stats,
     history: history(db, devices, now, days),
     alerts: notifications(db),
   };
