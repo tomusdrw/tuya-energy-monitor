@@ -61,7 +61,7 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
         .join('\n');
       const details =
         `Mieszkanie: ${home.name}\nDzień: ${day}\nZaobserwowane zużycie: ${energy(stats)}\n${sources(stats)}\n` +
-        `Zakres: ${stats.metered} liczników, ${stats.estimated} estymowanych / ${stats.monitored} wybranych urządzeń; pokrycie czasu ${coverage(stats.coverage)}.\n` +
+        `Zakres: ${stats.metered} z pomiarem, ${stats.estimated} estymowanych / ${stats.monitored} wybranych urządzeń; pokrycie czasu ${coverage(stats.coverage)}.\n` +
         (stats.complete ? '' : 'Suma częściowa. Brakujące pomiary nie są zerowym zużyciem.\n') +
         `\nNajwiększy udział w sumie:\n${contributors || 'Brak dostępnych odczytów.'}`;
       if (
@@ -173,7 +173,7 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
   const body =
     `Podsumowanie okresu ${weekStart} – ${previousDate(weekEnd, 1)} (${TIMEZONE}).\n\n` +
     `${lines.join('\n\n') || 'Brak mieszkań.'}\n\nStan monitorowania:\n${accountHealth}\n` +
-    `Bez licznika lub konfiguracji estymacji: ${unsupported.length}${unsupported.length ? ` (${unsupported.map((d) => d.name).join(', ')})` : ''}.\n` +
+    `Bez pomiaru lub konfiguracji estymacji: ${unsupported.length}${unsupported.length ? ` (${unsupported.map((d) => d.name).join(', ')})` : ''}.\n` +
     `Estymacja bez aktualnego sygnału grzania: ${unknown.length}${unknown.length ? ` (${unknown.map((d) => d.name).join(', ')})` : ''}.\n` +
     `Offline lub nieaktualne: ${stale.length}${stale.length ? ` (${stale.map((d) => d.name).join(', ')})` : ''}.\n\n` +
     '≈ oznacza sumę zawierającą estymację: moc ogrzewania × zaobserwowany czas grzania. Niepełne sumy obejmują wyłącznie dostępne dane. Podsumowanie wysyłamy również wtedy, gdy nie było alertów.';

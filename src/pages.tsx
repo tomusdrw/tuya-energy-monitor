@@ -226,7 +226,7 @@ export function HomePage({ id }: { id: string }) {
             {home.devices.map((d) => (
               <a className="device-row" href={`#device/${d.id}`} key={d.id}>
                 <div className="device-name">
-                  <span className={`device-icon ${d.energyKind === 'cumulative' ? 'blue' : ''}`}>
+                  <span className={`device-icon ${d.energySource === 'measured' ? 'blue' : ''}`}>
                     {d.category === 'wk' ? <Thermometer size={19} /> : <Zap size={19} />}
                   </span>
                   <div>
@@ -257,7 +257,9 @@ export function HomePage({ id }: { id: string }) {
                       : d.energyKind === 'cumulative'
                         ? 'Licznik kWh'
                         : d.energyKind === 'incremental'
-                          ? 'Nieobsługiwane raporty'
+                          ? d.reportingConnected
+                            ? 'Raporty przyrostowe'
+                            : 'Raporty: brak połączenia'
                           : 'Brak energii'}
                   </Badge>
                 </span>
@@ -322,11 +324,20 @@ export function DevicePage({ id }: { id: string }) {
           <p>{percent(device.stats.coverage)} pokrycia czasu</p>
         </div>
         <div className="stat">
-          <span>Stan licznika</span>
-          <strong>
-            {number(device.counterKwh)} <small>kWh</small>
-          </strong>
-          <p>Łączny licznik urządzenia, nie zużycie dobowe</p>
+          <span>{device.energyKind === 'incremental' ? 'Odbiór raportów' : 'Stan licznika'}</span>
+          {device.energyKind === 'incremental' ? (
+            <>
+              <strong>{device.reportingConnected ? 'Połączono' : 'Brak połączenia'}</strong>
+              <p>Ostatni raport: {date(device.lastEnergyReport)}</p>
+            </>
+          ) : (
+            <>
+              <strong>
+                {number(device.counterKwh)} <small>kWh</small>
+              </strong>
+              <p>Łączny licznik urządzenia, nie zużycie dobowe</p>
+            </>
+          )}
         </div>
         <div className="stat">
           <span>Temperatura bieżąca</span>
@@ -340,12 +351,18 @@ export function DevicePage({ id }: { id: string }) {
           </p>
         </div>
       </div>
+      {device.energyKind === 'incremental' && (
+        <Notice tone={device.reportingConnected ? undefined : 'warning'}>
+          Sumujemy raporty energii odebrane na żywo. Powtórzenia tego samego raportu nie zwiększają
+          zużycia. Przerwy w odbiorze mogą powodować braki; nie odtwarzamy wcześniejszych raportów.
+          Raporty punktowe nie potwierdzają pokrycia czasu, dlatego suma pozostaje częściowa.
+          {device.lastEnergyReport === null && ' Czekamy na pierwszy raport energii.'}
+        </Notice>
+      )}
       {device.energySource === 'missing' && (
         <Notice tone="warning">
-          {device.energyKind === 'incremental'
-            ? 'To urządzenie udostępnia przyrostowe raporty energii. Okresowe odpytywanie nie pozwala ich bezpiecznie sumować.'
-            : 'Obecne połączenie Tuya nie udostępnia licznika energii tego urządzenia.'}{' '}
-          Możesz skonfigurować estymację poniżej, jeśli dostępny jest sygnał aktywnego grzania.
+          Obecne połączenie Tuya nie udostępnia licznika energii tego urządzenia. Możesz
+          skonfigurować estymację poniżej, jeśli dostępny jest sygnał aktywnego grzania.
         </Notice>
       )}
       <EstimationForm key={device.id} device={device} onSaved={refresh} />
@@ -651,6 +668,10 @@ export function SettingsPage() {
             <dd>Co {data.statusPollSeconds} sekund</dd>
           </div>
           <div>
+            <dt>Raporty przyrostowe</dt>
+            <dd>Na żywo, gdy działa połączenie Tuya</dd>
+          </div>
+          <div>
             <dt>Adres aplikacji</dt>
             <dd>{data.origin}</dd>
           </div>
@@ -667,8 +688,13 @@ export function SettingsPage() {
           przedziały na granicy dni dzielimy proporcjonalnie, więc dobowe wartości są przybliżeniem.
         </p>
         <p>
+          Raporty przyrostowe sumujemy jednokrotnie według czasu raportu urządzenia. Przerwy w
+          odbiorze pozostawiają braki. Raporty punktowe nie potwierdzają pokrycia czasu; suma
+          pozostaje częściowa również przy aktywnym połączeniu.
+        </p>
+        <p>
           Estymacja (≈) to zadana moc w kW × zaobserwowany czas grzania w godzinach. Włączysz ją w
-          szczegółach urządzenia. Suma rozdziela pomiar licznika i szacunek; nie służy rozliczeniom.
+          szczegółach urządzenia. Suma rozdziela pomiar i szacunek; nie służy rozliczeniom.
         </p>
         <p>
           Brak źródła energii, urządzenie offline i reset licznika pozostawiają lukę. Granica

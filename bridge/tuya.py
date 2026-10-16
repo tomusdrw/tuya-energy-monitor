@@ -63,7 +63,7 @@ def normalize_device(device, specification, reports):
     types = {r['dp_code']: r.get('report_type') for r in reports}
     result = {'id': device['id'], 'name': device.get('name', 'Device'),
               'category': device.get('category', ''), 'online': bool(device.get('online')),
-              'energyCode': None, 'counterKwh': None, 'energyKind': 'unsupported',
+              'energyCode': None, 'counterKwh': None, 'incrementKwh': None, 'energyKind': 'unsupported',
               'temperature': None, 'powerW': None, 'statusFields': status_fields(device, specification)}
     for field in specification.get('status', []):
         code = field['code']
@@ -89,16 +89,32 @@ def normalize_device(device, specification, reports):
             continue
         if types.get(code) == 'sum':
             if result['energyKind'] == 'unsupported':
-                result.update(energyKind='incremental', energyCode=code)
+                result.update(energyKind='incremental', energyCode=code,
+                              incrementKwh=value / (1000 if unit == 'wh' else 1))
         elif types.get(code) == 'minux' or (code in CUMULATIVE_CODES and types.get(code) in (None, 'un_known')):
-            result.update(energyKind='cumulative', energyCode=code,
+            result.update(energyKind='cumulative', energyCode=code, incrementKwh=None,
                           counterKwh=value / (1000 if unit == 'wh' else 1))
     return result
 
 
-def run(request):
-    from tuya_sharing.user import LoginControl
+def create_api(session, on_token=None):
     from tuya_sharing.customerapi import CustomerApi, CustomerTokenInfo, SharingTokenListener
+    endpoint = urlsplit(session['endpoint'])
+    if (endpoint.scheme != 'https' or not endpoint.hostname or endpoint.username or endpoint.password or endpoint.port or
+            not endpoint.hostname.endswith(('.iotbing.com', '.tuya.com', '.tuyacn.com', '.tuyaeu.com', '.tuyaus.com', '.tuyain.com'))):
+        raise ValueError('Invalid endpoint')
+
+    class TokenListener(SharingTokenListener):
+        def update_token(self, token_info):
+            session['token_info'] = token_info
+            if on_token:
+                on_token(session)
+
+    return CustomerApi(CustomerTokenInfo(session['token_info']), CLIENT_ID, session['user_code'], session['endpoint'], TokenListener())
+
+
+def run(request, api=None, on_device=None):
+    from tuya_sharing.user import LoginControl
 
     operation = request['operation']
     if operation == 'start':
@@ -116,15 +132,7 @@ def run(request):
     if operation not in ('read', 'states'):
         return {'ok': False}
     session = request['session']
-    endpoint = urlsplit(session['endpoint'])
-    if endpoint.scheme != 'https' or not endpoint.hostname.endswith(('.iotbing.com', '.tuya.com', '.tuyacn.com', '.tuyaeu.com', '.tuyaus.com', '.tuyain.com')):
-        return {'ok': False}
-
-    class TokenListener(SharingTokenListener):
-        def update_token(self, token_info):
-            session['token_info'] = token_info
-
-    api = CustomerApi(CustomerTokenInfo(session['token_info']), CLIENT_ID, session['user_code'], session['endpoint'], TokenListener())
+    api = api or create_api(session)
 
     def get(path, params=None):
         response = api.get(path, params)
@@ -144,6 +152,8 @@ def run(request):
                 specification = get(f'/v1.1/m/life/{device_id}/specifications')
                 reports = get(f'/v1.0/m/life/ha/{device_id}/dp-report-types')
                 devices.append(normalize_device(device, specification, reports))
+                if on_device:
+                    on_device(device, specification, reports)
             homes.append({'id': home_id, 'name': home['name'], 'devices': devices})
         return {'ok': True, 'snapshot': {'homes': homes}, 'session': session}
     except Exception:

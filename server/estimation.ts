@@ -46,7 +46,7 @@ export function estimationConfig(d: Row): EstimationConfig {
   };
 }
 export function energySource(d: Row): 'measured' | 'estimated' | 'missing' {
-  if (d.energy_kind === 'cumulative') return 'measured';
+  if (d.energy_kind === 'cumulative' || d.energy_kind === 'incremental') return 'measured';
   return d.estimate_enabled && d.rated_power_kw > 0 && d.heating_code ? 'estimated' : 'missing';
 }
 

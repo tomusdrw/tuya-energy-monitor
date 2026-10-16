@@ -227,7 +227,7 @@ test('v1 database migrates additively, preserves credentials/readings/intervals 
     old.close();
     for (let i = 0; i < 2; i++) {
       const db = openDatabase(path);
-      assert.equal((db.prepare('PRAGMA user_version').get() as any).user_version, 2);
+      assert.equal((db.prepare('PRAGMA user_version').get() as any).user_version, 3);
       assert.equal((db.prepare('SELECT secret FROM accounts').get() as any).secret, 'encrypted');
       const interval = db.prepare('SELECT * FROM intervals').get() as any;
       assert.equal(interval.source, 'measured');
