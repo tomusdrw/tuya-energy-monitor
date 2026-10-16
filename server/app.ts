@@ -14,6 +14,7 @@ import { accounts, getOverview, getHome, getDevice, notifications, TIMEZONE } fr
 import { emailConfigured, type Config } from './config.js';
 import { callTuya, sessionSchema, type TuyaCall, type TuyaSession } from './tuya.js';
 import { Collector } from './collector.js';
+import { TuyaStream } from './stream.js';
 import { configureEstimation } from './estimation.js';
 import { evaluateNotifications, deliverPending } from './notifications.js';
 
@@ -58,7 +59,15 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
   const app = Fastify({ logger: false, bodyLimit: 16384, requestTimeout: 200000 });
   const tuya =
     dependencies.tuya ?? ((operation, payload) => callTuya(operation, payload, config.python));
-  const collector = new Collector(db, config, tuya);
+  const collector = new Collector(
+    db,
+    config,
+    tuya,
+    Date.now,
+    dependencies.tuya
+      ? undefined
+      : (session, onMessage) => new TuyaStream(session, onMessage, config.python),
+  );
   let delivery: Promise<void> | null = null;
   collector.afterSync = async () => {
     const now = Date.now();

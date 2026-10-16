@@ -129,7 +129,7 @@ export function Dashboard({
       {!data.accounts.length ? (
         <div className="panel">
           <Empty title="Zacznij od połączenia konta">
-            Dodaj konto Tuya lub Smart Life. Odczytamy domy, urządzenia i dostępne liczniki energii.
+            Dodaj konto Tuya lub Smart Life. Odczytamy domy, urządzenia i dostępne pomiary energii.
             <br />
             Ustawienia ogrzewania pozostaną pod Twoją kontrolą.
           </Empty>
@@ -199,7 +199,7 @@ export function Dashboard({
                   ? 'Czekamy na pierwsze pomiary zużycia.'
                   : 'Ta suma obejmuje tylko dostępne pomiary.'}
               </strong>{' '}
-              Urządzenia bez licznika lub skonfigurowanej estymacji, przerwy w odczytach i czas
+              Urządzenia bez pomiaru lub skonfigurowanej estymacji, przerwy w odczytach i czas
               sprzed uruchomienia monitoringu nie są liczone jako zero.
             </Notice>
           )}

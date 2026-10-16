@@ -87,8 +87,8 @@ export function EstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
       </div>
       {device.energySource === 'measured' ? (
         <Notice>
-          Urządzenie ma licznik energii. Jego pomiar ma pierwszeństwo; estymacja nie dodaje zużycia
-          dla tego samego urządzenia.
+          Urządzenie udostępnia pomiar energii. Pomiar ma pierwszeństwo; estymacja nie dodaje
+          zużycia dla tego samego urządzenia.
         </Notice>
       ) : e.enabled && e.state === 'unknown' ? (
         <Notice tone="warning">

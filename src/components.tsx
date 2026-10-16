@@ -136,7 +136,7 @@ export function Coverage({ stats }: { stats: EnergyStats }) {
   return (
     <span className="coverage">
       <span className={`status-dot ${stats.complete ? 'green' : 'amber'}`} />
-      {stats.metered} z licznikiem · {stats.estimated} z estymacją / {stats.monitored} wybranych ·{' '}
+      {stats.metered} z pomiarem · {stats.estimated} z estymacją / {stats.monitored} wybranych ·{' '}
       {percent(stats.coverage)} pokrycia czasu
     </span>
   );
@@ -162,8 +162,9 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
   if (!points.some((p) => p.kwh !== null))
     return (
       <Empty title="Historia właśnie się zaczyna">
-        Wykres pojawi się po dwóch poprawnych odczytach licznika lub skonfigurowanego stanu grzania.
-        Nie pobieramy wcześniejszej historii z aplikacji Tuya.
+        Wykres pojawi się po pierwszym raporcie przyrostowym albo dwóch poprawnych odczytach
+        licznika lub skonfigurowanego stanu grzania. Nie pobieramy wcześniejszej historii z
+        aplikacji Tuya.
       </Empty>
     );
   const max = Math.max(1, ...points.map((p) => p.kwh ?? 0));
@@ -255,7 +256,7 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
       <div className="chart-legend">
         <span>
           <i className="legend-blue" />
-          Licznik energii
+          Pomiar energii
         </span>
         <span>
           <i className="legend-purple" />
