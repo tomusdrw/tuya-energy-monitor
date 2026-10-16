@@ -49,10 +49,10 @@ export const appMessages: Record<string, string> = {
   'Back to overview': 'Wróć do przeglądu',
   'Europe/Warsaw · Status every 60 s · Meters every 5 min':
     'Europe/Warsaw · Stany co 60 s · Liczniki co 5 min',
-  'Add a Tuya or Smart Life account. We will read its homes, devices and available energy meters.':
-    'Dodaj konto Tuya lub Smart Life. Odczytamy domy, urządzenia i dostępne liczniki energii.',
-  'Devices without a meter or configured estimation, gaps in readings and time before monitoring started are not counted as zero.':
-    'Urządzenia bez licznika lub skonfigurowanej estymacji, przerwy w odczytach i czas sprzed uruchomienia monitoringu nie są liczone jako zero.',
+  'Add a Tuya or Smart Life account. We will read its homes, devices and available energy measurements.':
+    'Dodaj konto Tuya lub Smart Life. Odczytamy domy, urządzenia i dostępne pomiary energii.',
+  'Devices without energy measurements or configured estimation, gaps in readings and time before monitoring started are not counted as zero.':
+    'Urządzenia bez pomiaru lub skonfigurowanej estymacji, przerwy w odczytach i czas sprzed uruchomienia monitoringu nie są liczone jako zero.',
   'Signing in…': 'Logowanie…',
   'Sign in': 'Zaloguj się',
   'Waiting for the first energy readings.': 'Czekamy na pierwsze pomiary zużycia.',

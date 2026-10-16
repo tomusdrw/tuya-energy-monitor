@@ -6,6 +6,7 @@ import { evaluateNotifications, deliverPending } from '../server/notifications.j
 import type { Config } from '../server/config.js';
 import { localizeNotification } from '../shared/notificationMessages.js';
 import { localizeSystemMessage } from '../shared/systemMessages.js';
+import { ingestEnergyReport } from '../server/incremental.js';
 
 const now = Date.parse('2026-10-16T10:00:00Z'); // Noon Warsaw.
 const config: Config = {
@@ -491,7 +492,49 @@ test('evaluating an existing historical alert does not attach a translation from
     assert.equal(historical.title, 'Historyczny tytuł');
     assert.equal(historical.body, 'Historyczna treść');
     assert.equal(historical.translations, undefined);
-    assert.equal((f.db.prepare('PRAGMA user_version').get() as any).user_version, 2);
+    assert.equal((f.db.prepare('PRAGMA user_version').get() as any).user_version, 3);
+  } finally {
+    f.db.close();
+  }
+});
+
+test('incremental reports produce measured English alerts and Polish display text without inventing coverage', () => {
+  const f = fixture();
+  try {
+    const start = dayBounds('2026-10-16').start;
+    f.db
+      .prepare(
+        "UPDATE devices SET energy_kind='incremental',energy_code='add_ele',counter_kwh=NULL,incremental_since=?",
+      )
+      .run(start);
+    f.db.prepare('UPDATE homes SET daily_limit=1,anomaly_enabled=0').run();
+    ingestEnergyReport(
+      f.db,
+      'a',
+      { deviceId: 'd', code: 'add_ele', at: now - 1000, kwh: 1.25 },
+      now,
+    );
+    evaluateNotifications(f.db, now);
+    const alert = notifications(f.db).find((event) => event.kind === 'threshold')!;
+    assert.match(alert.body, /Observed usage: 1\.25 kWh/);
+    assert.match(
+      alert.body,
+      /Scope: 1 with measurements, 0 estimated \/ 1 selected devices; time coverage 0%/,
+    );
+    assert.match(alert.body, /Partial total\. Missing readings do not mean zero usage\./);
+    const polish = localizeNotification(alert, 'pl');
+    assert.match(polish.body, /Zaobserwowane zużycie: 1,25 kWh/);
+    assert.match(
+      polish.body,
+      /Zakres: 1 z pomiarem, 0 estymowanych \/ 1 wybranych urządzeń; pokrycie czasu 0%/,
+    );
+    assert.match(polish.body, /Suma częściowa\./);
+    const weekly = notifications(f.db).find((event) => event.kind === 'weekly')!;
+    assert.match(weekly.body, /Without measurements or estimation configuration: 0\./);
+    assert.match(
+      localizeNotification(weekly, 'pl').body,
+      /Bez pomiaru lub konfiguracji estymacji: 0\./,
+    );
   } finally {
     f.db.close();
   }

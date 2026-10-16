@@ -64,8 +64,8 @@ Files: `server/app.ts`, `server/collector.ts`, `server/notifications.ts`, `serve
 
 ## Verification results
 
-- Baseline: 46 Node tests passing. Final: 61 Node tests and 10 Python bridge tests passing.
+- Baseline: 46 Node tests passing. Final, including integration with incremental energy reports: 76 Node tests and 17 Python bridge tests passing.
 - Production build, both TypeScript configurations, formatting and diff whitespace checks passed.
 - Independent review found no actionable issues; UI/system placeholder coverage checked.
 - Browser smoke checks used an isolated in-memory synthetic database: English default, Polish selection, reload/sign-out persistence, invalid and blocked storage, live error translation, draft form retention, notifications in both languages, localized numbers, preserved names, and mobile selector visibility without horizontal overflow.
-- No schema migration or production deployment was performed. Historical notification prose and already attempted delivery payloads remain unchanged.
+- Language support adds no schema migration; the integrated incremental-report feature uses schema v3. No production deployment was performed. Historical notification prose and already attempted delivery payloads remain unchanged.

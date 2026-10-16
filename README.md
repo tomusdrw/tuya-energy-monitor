@@ -109,16 +109,18 @@ and Tuya may return cached state. This is for overuse detection, not billing.
 
 Each estimate stores its original kWh, ON time and configuration revision.
 Changing power, mapping or enablement starts a new baseline and affects future
-estimates only. Previous energy is never recalculated. A real cumulative meter
-always takes precedence for the same device. Totals containing estimates use
+estimates only. Previous energy is never recalculated. Cumulative meters and
+incremental energy reports take precedence for the same device. Totals containing
+estimates use
 **≈**, with measured/estimated components and coverage shown separately in
 cards, chart tooltips and notifications. Coverage measures observed time, not
 accuracy of the rated-power assumption.
 
 The existing sharing-cloud credentials are reused. Local TinyTuya/MQTT push is
 not implemented: this installation has no access to the apartments' LANs. The
-adapter performs read-only cloud polling; no device commands are sent. The
-runtime method **requires an exposed relay signal**. If the current API returns
+runtime adapter uses read-only cloud polling; incremental energy uses cloud MQTT
+reports. No device commands are sent. The runtime method **requires an exposed
+relay signal**. If the current API returns
 only a thermostat switch and temperature settings, enabling estimation cannot
 recover that missing signal; the panel explicitly stays unknown. Raw recent
 observations are available in the device detail for diagnostics, and complete
@@ -128,9 +130,27 @@ history remains in SQLite `heating_observations` and `intervals`.
 
 - **Counter** is the device's cumulative kWh. The first reading is a baseline,
   not that day's usage. History starts when two valid readings are available.
-- Only known cumulative consumption codes with validated units/scales are used.
-  Energy returned to the grid is excluded. Incremental reports cannot safely be
-  added by polling, so this version labels them unsupported.
+- Known cumulative consumption codes and incremental fields marked `sum` by Tuya
+  are supported, with validated units/scales. Energy returned to the grid is excluded.
+  Incremental consumption comes only from live MQTT reports, never from polled status.
+  Each account has a persistent Python worker; polling and MQTT share one serialized
+  API client so they cannot race to refresh the same credentials.
+- Incremental reports are stored durably in SQLite and deduplicated by account,
+  device, field and Tuya report ID (`dataId`). When no report ID is available, the
+  device timestamp is the fallback identity; conflicting reports for the same field
+  and timestamp count once. Equal values from distinct reports still count separately.
+  Reports without a valid device timestamp, retained messages and negative values
+  are ignored. Valid late reports are assigned to their reported Warsaw date.
+- Incremental history begins when the device is discovered as an incremental source.
+  There is no backfill after an application/network outage. The device page shows
+  subscription health and the last energy report separately from cloud polling.
+  Point reports do not establish time coverage or prove zero consumption during
+  silence: their sum remains partial, with no time coverage added. This also prevents
+  anomaly comparisons from treating missing reports as complete days. Daily threshold
+  alerts and weekly summaries include the observed increments.
+- Incremental and cumulative measurements take precedence over configured runtime
+  estimation. Old estimates remain in history; new estimates stop when a measured
+  source is discovered, and reports predating that transition are ignored.
 - Offline samples, counter resets, a change of counter field, and intervals
   longer than 15 minutes leave gaps. Old offline values are shown as counters
   but do not create new consumption. Read time means the cloud was queried,
@@ -146,6 +166,10 @@ history remains in SQLite `heating_observations` and `intervals`.
   Anomalies require adequate history for the current set of measured and configured estimated devices.
 - Past Smart Life app statistics and thermostat-specific monthly fields are
   not imported. No tariff or billing calculation is performed.
+
+The stream uses the pinned [Tuya sharing SDK](https://github.com/tuya/tuya-device-sharing-sdk/tree/0.2.15)
+and its local DP conversion strategies. Report identity and timestamps follow
+Tuya's [device message format](https://developer.tuya.com/en/docs/iot/message-type?id=Kavqerli65a1u).
 
 ## Alerts and weekly summaries
 
@@ -239,8 +263,10 @@ upgrades; a different key cannot decrypt existing accounts and startup fails.
 Changing the admin password invalidates sessions on the next startup.
 
 Schema v2 migrates existing readings and intervals additively, marking prior
-intervals as measured. Back up before upgrading; do not run an older application
-against a migrated database.
+intervals as measured. Schema v3 adds incremental report storage and subscription
+state. Language support uses existing metadata and requires no additional schema
+migration. Back up before upgrading; do not run an older application against a
+migrated database.
 
 Run one process per database. Raw readings, heating observations and intervals are retained; size grows
 with time and the number of devices. Schedule volume backups and monitor disk

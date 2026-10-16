@@ -7,6 +7,7 @@ import { encrypt, decrypt } from '../server/crypto.js';
 import { devicesFor, getDevice, usage } from '../server/energy.js';
 import { configureEstimation } from '../server/estimation.js';
 import type { TuyaCall } from '../server/tuya.js';
+import type { StreamFactory } from '../server/stream.js';
 const minute = 60000;
 const session = {
   user_code: 'user',
@@ -36,7 +37,7 @@ const device = {
 const snapshot = {
   homes: [{ id: 'h', name: 'Home', devices: [device, { ...device, id: 'other' }] }],
 };
-function fixture(tuya: TuyaCall) {
+function fixture(tuya: TuyaCall, streamFactory?: StreamFactory) {
   const db = openDatabase(':memory:');
   db.prepare('INSERT INTO accounts(id,label,secret) VALUES(?,?,?)').run(
     'a',
@@ -44,7 +45,7 @@ function fixture(tuya: TuyaCall) {
     encrypt(session, config.encryptionKey),
   );
   let now = Date.parse('2026-10-16T10:00Z');
-  const collector = new Collector(db, config, tuya, () => now);
+  const collector = new Collector(db, config, tuya, () => now, streamFactory);
   const advance = (ms = minute) => (now += ms);
   return { db, collector, advance, now: () => now };
 }
@@ -86,6 +87,161 @@ test('collector reads full inventory every five minutes and only enabled thermos
     assert.equal(calls[1].payload.session.token_info.access_token, 'new');
     assert.equal(usage(f.db, [d], f.now() - 5 * minute, f.now(), f.now()).estimatedKwh, 0.133333);
     assert.equal(getDevice(f.db, d.id, f.now())?.estimation.state, 'on');
+  } finally {
+    await f.collector.stop();
+    f.db.close();
+  }
+});
+
+test('live account worker ingests reports, persists token rotations and ignores superseded workers', async () => {
+  const workers: { emit: (message: any) => void; stopped: boolean; calls: string[] }[] = [];
+  const liveDevice = { ...device, energyKind: 'incremental', energyCode: 'add_ele' };
+  const f = fixture(
+    async () => {
+      throw new Error('Live accounts must use a single token owner');
+    },
+    (_session, emit) => {
+      const record = { emit, stopped: false, calls: [] as string[] };
+      workers.push(record);
+      return {
+        alive: true,
+        call: async (operation) => {
+          record.calls.push(operation);
+          if (operation === 'read')
+            return {
+              ok: true,
+              snapshot: { homes: [{ id: 'h', name: 'H', devices: [liveDevice] }] },
+            };
+          return { ok: true };
+        },
+        stop: async () => {
+          record.stopped = true;
+        },
+      };
+    },
+  );
+  try {
+    await f.collector.sync();
+    assert.deepEqual(workers[0].calls, ['read', 'subscribe']);
+    f.advance();
+    workers[0].emit({
+      type: 'session',
+      session: { ...session, token_info: { ...session.token_info, access_token: 'rotated' } },
+    });
+    const saved = decrypt(
+      (f.db.prepare('SELECT secret FROM accounts').get() as any).secret,
+      config.encryptionKey,
+    ) as any;
+    assert.equal(saved.token_info.access_token, 'rotated');
+    workers[0].emit({ type: 'stream', connected: true, deviceIds: ['d'] });
+    const report = { deviceId: 'd', code: 'add_ele', at: f.now(), kwh: 0.12 };
+    workers[0].emit({ type: 'energy', report });
+    workers[0].emit({ type: 'energy', report });
+    f.advance(1);
+    const d = devicesFor(f.db)[0];
+    assert.equal(getDevice(f.db, d.id, f.now())?.stats.kwh, 0.12);
+    assert.equal(getDevice(f.db, d.id, f.now())?.reportingConnected, true);
+    await f.collector.sync();
+    assert.equal(workers.length, 1, 'Own token refresh must not restart MQTT');
+    f.db
+      .prepare('UPDATE accounts SET secret=?')
+      .run(encrypt({ ...session, user_code: 'reconnected' }, config.encryptionKey));
+    workers[0].emit({ type: 'energy', report: { ...report, at: f.now(), kwh: 99 } });
+    workers[0].emit({ type: 'session', session });
+    await f.collector.sync();
+    assert.equal(workers.length, 2);
+    assert.equal(workers[0].stopped, true);
+    assert.equal(getDevice(f.db, d.id, f.now())?.stats.kwh, 0.12);
+  } finally {
+    await f.collector.stop();
+    assert.ok(workers.every((worker) => worker.stopped));
+    f.db.close();
+  }
+});
+
+test('shutdown while retiring a reconnected worker cannot create a replacement after stop', async () => {
+  let release!: () => void;
+  let stopping!: () => void;
+  const enteredStop = new Promise<void>((resolve) => {
+    stopping = resolve;
+  });
+  const stopped = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let created = 0;
+  const f = fixture(
+    async () => ({ ok: false }),
+    () => {
+      created++;
+      return {
+        alive: true,
+        call: async () => ({ ok: true, snapshot }),
+        stop: async () => {
+          stopping();
+          await stopped;
+        },
+      };
+    },
+  );
+  try {
+    await f.collector.sync();
+    f.db
+      .prepare('UPDATE accounts SET secret=?')
+      .run(encrypt({ ...session, user_code: 'new' }, config.encryptionKey));
+    const collecting = f.collector.sync();
+    await enteredStop;
+    const shutdown = f.collector.stop();
+    release();
+    await Promise.all([collecting, shutdown]);
+    assert.equal(created, 1);
+  } finally {
+    release();
+    await f.collector.stop();
+    f.db.close();
+  }
+});
+
+test('another account rotating tokens during collection retains its live worker and latest credentials', async () => {
+  const listeners: ((message: any) => void)[] = [];
+  let rotate = false;
+  const f = fixture(
+    async () => ({ ok: false }),
+    (_session, emit) => {
+      const index = listeners.push(emit) - 1;
+      return {
+        alive: true,
+        call: async (operation) => {
+          if (index === 0 && operation === 'read' && rotate) {
+            listeners[1]({
+              type: 'session',
+              session: {
+                ...session,
+                token_info: { ...session.token_info, access_token: 'fresh-b' },
+              },
+            });
+            rotate = false;
+          }
+          return { ok: true, snapshot };
+        },
+        stop: async () => {},
+      };
+    },
+  );
+  try {
+    f.db
+      .prepare('INSERT INTO accounts(id,label,secret) VALUES(?,?,?)')
+      .run('b', 'B', encrypt(session, config.encryptionKey));
+    await f.collector.sync();
+    assert.equal(listeners.length, 2);
+    rotate = true;
+    f.advance();
+    await f.collector.sync();
+    assert.equal(listeners.length, 2);
+    const saved = decrypt(
+      (f.db.prepare("SELECT secret FROM accounts WHERE id='b'").get() as any).secret,
+      config.encryptionKey,
+    ) as any;
+    assert.equal(saved.token_info.access_token, 'fresh-b');
   } finally {
     await f.collector.stop();
     f.db.close();

@@ -44,7 +44,6 @@ export const messages: Messages = {
   'Estimate: no signal': 'Estymacja: brak sygnału',
   'Estimated kWh': 'Estymacja kWh',
   'kWh meter': 'Licznik kWh',
-  'Unsupported reports': 'Nieobsługiwane raporty',
   'No energy data': 'Brak energii',
   'No devices': 'Brak urządzeń',
   'Check the account connection and refresh the data.': 'Sprawdź połączenie konta i odśwież dane.',
@@ -55,12 +54,6 @@ export const messages: Messages = {
   'Current temperature': 'Temperatura bieżąca',
   'No temperature reading': 'Brak odczytu temperatury',
   'Reading provided by the device': 'Odczyt udostępniony przez urządzenie',
-  'This device provides incremental energy reports. Periodic polling cannot safely add them up.':
-    'To urządzenie udostępnia przyrostowe raporty energii. Okresowe odpytywanie nie pozwala ich bezpiecznie sumować.',
-  'The current Tuya connection does not provide an energy meter for this device.':
-    'Obecne połączenie Tuya nie udostępnia licznika energii tego urządzenia.',
-  'You can configure estimation below if an active heating signal is available.':
-    'Możesz skonfigurować estymację poniżej, jeśli dostępny jest sygnał aktywnego grzania.',
   'Device history': 'Historia urządzenia',
   'Monitoring participation': 'Udział w monitorowaniu',
   'Include devices that heat the apartment.':
@@ -144,12 +137,25 @@ export const messages: Messages = {
   'How to read the results': 'Jak czytać wyniki',
   'Usage is calculated from meter increases. The first reading establishes a starting point. Short intervals across day boundaries are split proportionally, so daily values are approximate.':
     'Zużycie liczymy z przyrostów licznika. Pierwszy odczyt wyznacza punkt początkowy. Krótkie przedziały na granicy dni dzielimy proporcjonalnie, więc dobowe wartości są przybliżeniem.',
-  'An estimate (≈) is the configured power in kW × observed heating time in hours. Enable it in device details. Totals separate meter readings from estimates; they are not intended for billing.':
-    'Estymacja (≈) to zadana moc w kW × zaobserwowany czas grzania w godzinach. Włączysz ją w szczegółach urządzenia. Suma rozdziela pomiar licznika i szacunek; nie służy rozliczeniom.',
   'A missing energy source, offline device, or meter reset leaves a gap. The gap limit is 15 minutes for meters and 3 minutes for estimates. Coverage shows how much of the time and selected devices have readings. A dash (—) means no data.':
     'Brak źródła energii, urządzenie offline i reset licznika pozostawiają lukę. Granica przerwy to 15 minut dla liczników i 3 minuty dla estymacji. Pokrycie mówi, dla jakiej części czasu i wybranych urządzeń mamy pomiar. Wartość „—” oznacza brak danych.',
   'A daily alert may concern a partial total; the message will say so. An anomaly requires at least 7 comparable days with at least 95% coverage for each compared device. Changing power or state mapping requires new comparison history.':
     'Alert dzienny może dotyczyć częściowej sumy — wiadomość to zaznaczy. Anomalia wymaga przynajmniej 7 porównywalnych dni z co najmniej 95% pokrycia dla każdego porównywanego urządzenia. Zmiana mocy lub mapowania stanu wymaga nowej historii do porównań.',
   'Set thresholds and device selection separately for each apartment. History from the Tuya mobile app is not imported.':
     'Progi i wybór urządzeń ustawisz osobno w każdym mieszkaniu. Historia z aplikacji mobilnej Tuya nie jest importowana.',
+  'Incremental reports': 'Raporty przyrostowe',
+  'Reports: disconnected': 'Raporty: brak połączenia',
+  'Report reception': 'Odbiór raportów',
+  Disconnected: 'Brak połączenia',
+  'Last report: {date}': 'Ostatni raport: {date}',
+  'Waiting for the first energy report.': 'Czekamy na pierwszy raport energii.',
+  'Live while the Tuya connection is active': 'Na żywo, gdy działa połączenie Tuya',
+  'We add up energy reports received live. Repeated copies of the same report do not increase usage. Interruptions can leave gaps; earlier reports are not recovered. Point reports do not establish time coverage, so the total remains partial.':
+    'Sumujemy raporty energii odebrane na żywo. Powtórzenia tego samego raportu nie zwiększają zużycia. Przerwy w odbiorze mogą powodować braki; nie odtwarzamy wcześniejszych raportów. Raporty punktowe nie potwierdzają pokrycia czasu, dlatego suma pozostaje częściowa.',
+  'The current Tuya connection does not provide an energy meter for this device. You can configure estimation below if an active heating signal is available.':
+    'Obecne połączenie Tuya nie udostępnia licznika energii tego urządzenia. Możesz skonfigurować estymację poniżej, jeśli dostępny jest sygnał aktywnego grzania.',
+  'Incremental reports are counted once using the device report time. Interruptions in reception leave gaps. Point reports do not establish time coverage; the total remains partial even with an active connection.':
+    'Raporty przyrostowe sumujemy jednokrotnie według czasu raportu urządzenia. Przerwy w odbiorze pozostawiają braki. Raporty punktowe nie potwierdzają pokrycia czasu; suma pozostaje częściowa również przy aktywnym połączeniu.',
+  'An estimate (≈) is the configured power in kW × observed heating time in hours. Enable it in device details. Totals separate measurements from estimates; they are not intended for billing.':
+    'Estymacja (≈) to zadana moc w kW × zaobserwowany czas grzania w godzinach. Włączysz ją w szczegółach urządzenia. Suma rozdziela pomiar i szacunek; nie służy rozliczeniom.',
 };

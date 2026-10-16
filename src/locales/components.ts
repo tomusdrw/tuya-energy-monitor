@@ -2,17 +2,17 @@ export const componentMessages: Record<string, string> = {
   'Loading data…': 'Wczytuję dane…',
   'Measured: {energy} kWh': 'Pomiar: {energy} kWh',
   'Estimated: {energy} kWh': 'Estymacja: {energy} kWh',
-  '{metered} metered · {estimated} estimated / {monitored} selected · {coverage} time coverage':
-    '{metered} z licznikiem · {estimated} z estymacją / {monitored} wybranych · {coverage} pokrycia czasu',
+  '{metered} measured · {estimated} estimated / {monitored} selected · {coverage} time coverage':
+    '{metered} z pomiarem · {estimated} z estymacją / {monitored} wybranych · {coverage} pokrycia czasu',
   'History range': 'Zakres historii',
   '{days} days': '{days} dni',
   'Your history starts here': 'Historia właśnie się zaczyna',
-  'The chart will appear after two valid meter readings or configured heating-state readings. We do not import earlier history from the Tuya app.':
-    'Wykres pojawi się po dwóch poprawnych odczytach licznika lub skonfigurowanego stanu grzania. Nie pobieramy wcześniejszej historii z aplikacji Tuya.',
+  'The chart will appear after the first incremental report or two valid meter readings or configured heating-state readings. We do not import earlier history from the Tuya app.':
+    'Wykres pojawi się po pierwszym raporcie przyrostowym albo dwóch poprawnych odczytach licznika lub skonfigurowanego stanu grzania. Nie pobieramy wcześniejszej historii z aplikacji Tuya.',
   'Daily energy usage in kilowatt-hours': 'Dzienne zużycie energii w kilowatogodzinach',
   '{day}: {total}; measured: {measured} kWh; estimated: {estimated} kWh; coverage: {coverage}':
     '{day}: {total}; pomiar: {measured} kWh; estymacja: {estimated} kWh; pokrycie: {coverage}',
-  'Energy meter': 'Licznik energii',
+  'Energy measurement': 'Pomiar energii',
   'Heating time × power': 'Czas grzania × moc',
   'No data': 'Brak danych',
   'Lighter bar = partial data': 'Jaśniejszy słupek = częściowe dane',

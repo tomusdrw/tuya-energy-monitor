@@ -124,7 +124,7 @@ export function Coverage({ stats }: { stats: EnergyStats }) {
     <span className="coverage">
       <span className={`status-dot ${stats.complete ? 'green' : 'amber'}`} />
       {t(
-        '{metered} metered · {estimated} estimated / {monitored} selected · {coverage} time coverage',
+        '{metered} measured · {estimated} estimated / {monitored} selected · {coverage} time coverage',
         {
           metered: number(stats.metered, 0),
           estimated: number(stats.estimated, 0),
@@ -159,7 +159,7 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
     return (
       <Empty title={t('Your history starts here')}>
         {t(
-          'The chart will appear after two valid meter readings or configured heating-state readings. We do not import earlier history from the Tuya app.',
+          'The chart will appear after the first incremental report or two valid meter readings or configured heating-state readings. We do not import earlier history from the Tuya app.',
         )}
       </Empty>
     );
@@ -259,7 +259,7 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
       <div className="chart-legend">
         <span>
           <i className="legend-blue" />
-          {t('Energy meter')}
+          {t('Energy measurement')}
         </span>
         <span>
           <i className="legend-purple" />

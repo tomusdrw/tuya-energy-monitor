@@ -16,8 +16,8 @@ export const messages: Messages = {
   'Total observed': 'Łącznie zaobserwowano',
   'Estimated usage': 'Szacowane zużycie',
   'power × heating time': 'moc × czas grzania',
-  'The device has an energy meter. Its readings take precedence; estimation does not add usage for the same device.':
-    'Urządzenie ma licznik energii. Jego pomiar ma pierwszeństwo; estymacja nie dodaje zużycia dla tego samego urządzenia.',
+  'The device provides energy readings. Measurements take precedence; estimation does not add usage for the same device.':
+    'Urządzenie udostępnia pomiar energii. Pomiar ma pierwszeństwo; estymacja nie dodaje zużycia dla tego samego urządzenia.',
   'No current, recognized heating signal. This period remains missing data even when the thermostat is online.':
     'Brak aktualnego, rozpoznanego sygnału grzania. Ten okres pozostaje bez danych, nawet gdy termostat jest online.',
   'Turning the thermostat on (e.g. switch) does not confirm that the heater is running. Choose a field that indicates active heating and enter the power of the circuit controlled by the thermostat.':

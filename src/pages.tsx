@@ -239,7 +239,7 @@ export function HomePage({ id }: { id: string }) {
             {home.devices.map((d) => (
               <a className="device-row" href={`#device/${d.id}`} key={d.id}>
                 <div className="device-name">
-                  <span className={`device-icon ${d.energyKind === 'cumulative' ? 'blue' : ''}`}>
+                  <span className={`device-icon ${d.energySource === 'measured' ? 'blue' : ''}`}>
                     {d.category === 'wk' ? <Thermometer size={19} /> : <Zap size={19} />}
                   </span>
                   <div>
@@ -270,7 +270,9 @@ export function HomePage({ id }: { id: string }) {
                       : d.energyKind === 'cumulative'
                         ? t('kWh meter')
                         : d.energyKind === 'incremental'
-                          ? t('Unsupported reports')
+                          ? d.reportingConnected
+                            ? t('Incremental reports')
+                            : t('Reports: disconnected')
                           : t('No energy data')}
                   </Badge>
                 </span>
@@ -341,11 +343,22 @@ export function DevicePage({ id }: { id: string }) {
           <p>{t('{coverage} time coverage', { coverage: percent(device.stats.coverage) })}</p>
         </div>
         <div className="stat">
-          <span>{t('Meter reading')}</span>
-          <strong>
-            {number(device.counterKwh)} <small>kWh</small>
-          </strong>
-          <p>{t("The device's cumulative meter, not daily usage")}</p>
+          <span>
+            {device.energyKind === 'incremental' ? t('Report reception') : t('Meter reading')}
+          </span>
+          {device.energyKind === 'incremental' ? (
+            <>
+              <strong>{device.reportingConnected ? t('Connected') : t('Disconnected')}</strong>
+              <p>{t('Last report: {date}', { date: date(device.lastEnergyReport) })}</p>
+            </>
+          ) : (
+            <>
+              <strong>
+                {number(device.counterKwh)} <small>kWh</small>
+              </strong>
+              <p>{t("The device's cumulative meter, not daily usage")}</p>
+            </>
+          )}
         </div>
         <div className="stat">
           <span>{t('Current temperature')}</span>
@@ -359,16 +372,19 @@ export function DevicePage({ id }: { id: string }) {
           </p>
         </div>
       </div>
+      {device.energyKind === 'incremental' && (
+        <Notice tone={device.reportingConnected ? undefined : 'warning'}>
+          {t(
+            'We add up energy reports received live. Repeated copies of the same report do not increase usage. Interruptions can leave gaps; earlier reports are not recovered. Point reports do not establish time coverage, so the total remains partial.',
+          )}
+          {device.lastEnergyReport === null && <> {t('Waiting for the first energy report.')}</>}
+        </Notice>
+      )}
       {device.energySource === 'missing' && (
         <Notice tone="warning">
-          {device.energyKind === 'incremental'
-            ? t(
-                'This device provides incremental energy reports. Periodic polling cannot safely add them up.',
-              )
-            : t(
-                'The current Tuya connection does not provide an energy meter for this device.',
-              )}{' '}
-          {t('You can configure estimation below if an active heating signal is available.')}
+          {t(
+            'The current Tuya connection does not provide an energy meter for this device. You can configure estimation below if an active heating signal is available.',
+          )}
         </Notice>
       )}
       <EstimationForm key={device.id} device={device} onSaved={refresh} />
@@ -690,6 +706,10 @@ export function SettingsPage() {
             <dd>{t('Every {seconds} seconds', { seconds: number(data.statusPollSeconds, 0) })}</dd>
           </div>
           <div>
+            <dt>{t('Incremental reports')}</dt>
+            <dd>{t('Live while the Tuya connection is active')}</dd>
+          </div>
+          <div>
             <dt>{t('Application URL')}</dt>
             <dd>{data.origin}</dd>
           </div>
@@ -714,7 +734,12 @@ export function SettingsPage() {
         </p>
         <p>
           {t(
-            'An estimate (≈) is the configured power in kW × observed heating time in hours. Enable it in device details. Totals separate meter readings from estimates; they are not intended for billing.',
+            'Incremental reports are counted once using the device report time. Interruptions in reception leave gaps. Point reports do not establish time coverage; the total remains partial even with an active connection.',
+          )}
+        </p>
+        <p>
+          {t(
+            'An estimate (≈) is the configured power in kW × observed heating time in hours. Enable it in device details. Totals separate measurements from estimates; they are not intended for billing.',
           )}
         </p>
         <p>

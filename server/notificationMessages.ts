@@ -5,8 +5,8 @@ const messages = {
   'Measured: {measured}; estimated: {estimated}.': 'Pomiar: {measured}; estymacja: {estimated}.',
   'Home: {name}\nDay: {day}\nObserved usage: {energy}\n{sources}\n':
     'Mieszkanie: {name}\nDzień: {day}\nZaobserwowane zużycie: {energy}\n{sources}\n',
-  'Scope: {metered} meters, {estimated} estimated / {monitored} selected devices; time coverage {coverage}.\n':
-    'Zakres: {metered} liczników, {estimated} estymowanych / {monitored} wybranych urządzeń; pokrycie czasu {coverage}.\n',
+  'Scope: {metered} with measurements, {estimated} estimated / {monitored} selected devices; time coverage {coverage}.\n':
+    'Zakres: {metered} z pomiarem, {estimated} estymowanych / {monitored} wybranych urządzeń; pokrycie czasu {coverage}.\n',
   'Partial total. Missing readings do not mean zero usage.\n':
     'Suma częściowa. Brakujące pomiary nie są zerowym zużyciem.\n',
   '\nLargest contributors:\n{contributors}': '\nNajwiększy udział w sumie:\n{contributors}',
@@ -28,8 +28,8 @@ const messages = {
     'Podsumowanie okresu {start} – {end} ({timezone}).\n\n',
   'No homes.': 'Brak mieszkań.',
   '{homes}\n\nMonitoring status:\n{accounts}\n': '{homes}\n\nStan monitorowania:\n{accounts}\n',
-  'Without a meter or estimation configuration: {count}{names}.\n':
-    'Bez licznika lub konfiguracji estymacji: {count}{names}.\n',
+  'Without measurements or estimation configuration: {count}{names}.\n':
+    'Bez pomiaru lub konfiguracji estymacji: {count}{names}.\n',
   'Estimation without a current heating signal: {count}{names}.\n':
     'Estymacja bez aktualnego sygnału grzania: {count}{names}.\n',
   'Offline or stale: {count}{names}.\n\n': 'Offline lub nieaktualne: {count}{names}.\n\n',

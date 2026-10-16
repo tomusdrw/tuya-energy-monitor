@@ -137,7 +137,7 @@ export function Dashboard({
         <div className="panel">
           <Empty title={t('Start by connecting an account')}>
             {t(
-              'Add a Tuya or Smart Life account. We will read its homes, devices and available energy meters.',
+              'Add a Tuya or Smart Life account. We will read its homes, devices and available energy measurements.',
             )}
             <br />
             {t('Your heating settings stay under your control.')}
@@ -217,7 +217,7 @@ export function Dashboard({
                   : t('This total includes available readings only.')}
               </strong>{' '}
               {t(
-                'Devices without a meter or configured estimation, gaps in readings and time before monitoring started are not counted as zero.',
+                'Devices without energy measurements or configured estimation, gaps in readings and time before monitoring started are not counted as zero.',
               )}
             </Notice>
           )}

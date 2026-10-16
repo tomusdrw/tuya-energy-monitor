@@ -15,6 +15,7 @@ import type {
 import { localizeSystemMessage } from '../shared/systemMessages.js';
 import { scopedId } from './crypto.js';
 import { transaction } from './db.js';
+import { STREAM_FRESHNESS } from './incremental.js';
 import {
   recordHeatingState,
   statusFieldsSchema,
@@ -97,7 +98,9 @@ export function ingestSnapshot(
           continue;
         }
         const previousDevice = db
-          .prepare('SELECT status_updated_at FROM devices WHERE id=?')
+          .prepare(
+            'SELECT status_updated_at,energy_kind,energy_code,incremental_since FROM devices WHERE id=?',
+          )
           .get(id) as Row | undefined;
         if (previousDevice?.status_updated_at > now) {
           db.prepare('UPDATE devices SET present=1 WHERE id=?').run(id);
@@ -105,7 +108,9 @@ export function ingestSnapshot(
         }
         const counter = device.energyKind === 'cumulative' ? device.counterKwh : null;
         const included =
-          counter !== null || ['wk', 'qn', 'rs', 'dr', 'dlq'].includes(device.category);
+          device.energyKind === 'incremental' ||
+          counter !== null ||
+          ['wk', 'qn', 'rs', 'dr', 'dlq'].includes(device.category);
         db.prepare(
           `INSERT INTO devices(id,home_id,remote_id,name,category,included,online,last_seen,
           energy_kind,energy_code,counter_kwh,temperature,power_w) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -127,6 +132,16 @@ export function ingestSnapshot(
           device.temperature,
           device.powerW,
         );
+        if (
+          device.energyKind === 'incremental' &&
+          (previousDevice?.energy_kind !== 'incremental' ||
+            previousDevice?.energy_code !== device.energyCode ||
+            previousDevice?.incremental_since == null)
+        )
+          db.prepare('UPDATE devices SET incremental_since=?,energy_stream_at=NULL WHERE id=?').run(
+            now,
+            id,
+          );
         db.prepare(
           'INSERT INTO readings(device_id,at,counter_kwh,code,online) VALUES(?,?,?,?,?)',
         ).run(id, now, counter, device.energyCode, Number(device.online));
@@ -201,6 +216,18 @@ export function usage(
     AND (?=0 OR (source=? AND (source='measured' OR config_revision=?))) GROUP BY source`);
   for (const d of selected) {
     const source = energySource(d);
+    if (!options.comparable || source === 'measured') {
+      const reports = db
+        .prepare(
+          `SELECT COUNT(*) AS count,SUM(kwh) AS kwh FROM energy_reports
+        WHERE device_id=? AND at>=? AND at<?`,
+        )
+        .get(d.id, start, end) as Row;
+      if (reports.count) {
+        measured += reports.kwh;
+        measuredCount++;
+      }
+    }
     const rows = stmt.all(
       end,
       start,
@@ -236,7 +263,9 @@ export function usage(
       now - d.last_seen <= (source === 'estimated' ? MAX_HEATING_GAP : MAX_GAP);
     if (
       recent &&
-      (source === 'measured' ||
+      ((source === 'measured' &&
+        (d.energy_kind !== 'incremental' ||
+          (d.energy_stream_at !== null && now - d.energy_stream_at <= STREAM_FRESHNESS))) ||
         (source === 'estimated' && currentHeatingState(db, d, now) !== 'unknown'))
     )
       fresh++;
@@ -349,6 +378,13 @@ function deviceView(db: DatabaseSync, d: Row, now: number): DeviceView {
     lastSeen: d.last_seen,
     energyKind: d.energy_kind,
     energyCode: d.energy_code,
+    reportingConnected:
+      d.energy_kind === 'incremental' &&
+      d.energy_stream_at !== null &&
+      now - d.energy_stream_at <= STREAM_FRESHNESS,
+    lastEnergyReport: (
+      db.prepare('SELECT MAX(at) AS at FROM energy_reports WHERE device_id=?').get(d.id) as Row
+    ).at,
     counterKwh: d.counter_kwh,
     temperature: d.temperature,
     powerW: d.power_w,

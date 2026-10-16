@@ -87,3 +87,56 @@ test('estimation uses the selected language and number format while preserving r
     db.close();
   }
 });
+
+test('estimation explains measured precedence for cumulative and incremental devices in both languages', () => {
+  const db = openDatabase(':memory:');
+  try {
+    const now = Date.parse('2026-10-16T10:00:00Z');
+    db.exec("INSERT INTO accounts(id,label,secret) VALUES('a','A','unused')");
+    ingestSnapshot(
+      db,
+      'a',
+      {
+        homes: [
+          {
+            id: 'h',
+            name: 'H',
+            devices: ['cumulative', 'incremental'].map((energyKind) => ({
+              id: energyKind,
+              name: energyKind,
+              category: 'cz',
+              online: true,
+              energyKind,
+              energyCode: energyKind === 'cumulative' ? 'total_forward_energy' : 'add_ele',
+              counterKwh: energyKind === 'cumulative' ? 5 : null,
+              temperature: null,
+              powerW: null,
+            })),
+          },
+        ],
+      },
+      now,
+    );
+    for (const { id } of db.prepare('SELECT id FROM devices').all() as { id: string }[]) {
+      const device = getDevice(db, id, now)!;
+      assert.equal(device.energySource, 'measured');
+      for (const language of ['en', 'pl'] as const) {
+        const html = renderToStaticMarkup(
+          createElement(LanguageProvider, {
+            initialLanguage: language,
+            children: createElement(EstimationForm, { device, onSaved: () => {} }),
+          }),
+        );
+        assert.ok(
+          html.includes(
+            language === 'en'
+              ? 'The device provides energy readings. Measurements take precedence; estimation does not add usage for the same device.'
+              : 'Urządzenie udostępnia pomiar energii. Pomiar ma pierwszeństwo; estymacja nie dodaje zużycia dla tego samego urządzenia.',
+          ),
+        );
+      }
+    }
+  } finally {
+    db.close();
+  }
+});

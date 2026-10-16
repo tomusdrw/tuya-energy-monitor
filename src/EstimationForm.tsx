@@ -91,7 +91,7 @@ export function EstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
       {device.energySource === 'measured' ? (
         <Notice>
           {t(
-            'The device has an energy meter. Its readings take precedence; estimation does not add usage for the same device.',
+            'The device provides energy readings. Measurements take precedence; estimation does not add usage for the same device.',
           )}
         </Notice>
       ) : e.enabled && e.state === 'unknown' ? (

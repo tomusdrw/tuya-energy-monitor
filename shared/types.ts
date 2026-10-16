@@ -46,6 +46,8 @@ export interface DeviceView {
   lastSeen: number | null;
   energyKind: string;
   energyCode: string | null;
+  reportingConnected: boolean;
+  lastEnergyReport: number | null;
   counterKwh: number | null;
   temperature: number | null;
   powerW: number | null;

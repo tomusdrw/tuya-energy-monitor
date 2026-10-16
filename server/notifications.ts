@@ -86,7 +86,7 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
         }) +
         t(
           language,
-          'Scope: {metered} meters, {estimated} estimated / {monitored} selected devices; time coverage {coverage}.\n',
+          'Scope: {metered} with measurements, {estimated} estimated / {monitored} selected devices; time coverage {coverage}.\n',
           {
             metered: stats.metered,
             estimated: stats.estimated,
@@ -270,7 +270,7 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
             homes: lines.join('\n\n') || t(language, 'No homes.'),
             accounts: accountHealth,
           }) +
-          t(language, 'Without a meter or estimation configuration: {count}{names}.\n', {
+          t(language, 'Without measurements or estimation configuration: {count}{names}.\n', {
             count: unsupported.length,
             names: deviceNames(unsupported),
           }) +

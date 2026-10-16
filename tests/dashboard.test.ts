@@ -145,6 +145,85 @@ test('mixed totals identify estimates in dashboard, cards, chart and source brea
   db.close();
 });
 
+test('incremental reports render as measured energy without claiming time coverage in either language', async () => {
+  const { ingestSnapshot } = await import('../server/energy.js');
+  const { ingestEnergyReport } = await import('../server/incremental.js');
+  const db = openDatabase(':memory:');
+  const start = Date.parse('2026-10-16T10:00Z');
+  try {
+    db.exec("INSERT INTO accounts(id,label,secret) VALUES('a','A','unused')");
+    ingestSnapshot(
+      db,
+      'a',
+      {
+        homes: [
+          {
+            id: 'h',
+            name: 'Home',
+            devices: [
+              {
+                id: 'd',
+                name: 'Incremental meter',
+                category: 'cz',
+                online: true,
+                energyKind: 'incremental',
+                energyCode: 'add_ele',
+                counterKwh: null,
+                temperature: null,
+                powerW: null,
+              },
+            ],
+          },
+        ],
+      },
+      start,
+    );
+    const render = (language: 'en' | 'pl') =>
+      renderToStaticMarkup(
+        createElement(LanguageProvider, {
+          initialLanguage: language,
+          children: createElement(Dashboard, {
+            data: getOverview(db, start + 60000),
+            days: 14,
+            setDays: () => {},
+          }),
+        }),
+      );
+    assert.ok(render('en').includes('after the first incremental report'));
+    assert.ok(render('pl').includes('po pierwszym raporcie przyrostowym'));
+
+    ingestEnergyReport(
+      db,
+      'a',
+      {
+        deviceId: 'd',
+        code: 'add_ele',
+        at: start + 1000,
+        kwh: 0.12,
+      },
+      start + 60000,
+    );
+    const english = render('en');
+    assert.ok(english.includes('0.12'));
+    assert.ok(english.includes('1 measured · 0 estimated / 1 selected · 0% time coverage'));
+    assert.ok(english.includes('Energy measurement'));
+    assert.ok(
+      !english.includes('≈'),
+      'Actual incremental readings must not be marked as estimates',
+    );
+    assert.ok(
+      !english.includes('after the first incremental report'),
+      'One report starts the chart',
+    );
+    const polish = render('pl');
+    assert.ok(polish.includes('0,12'));
+    assert.ok(polish.includes('1 z pomiarem · 0 z estymacją / 1 wybranych · 0% pokrycia czasu'));
+    assert.ok(polish.includes('Pomiar energii'));
+  } finally {
+    db.close();
+  }
+});
+
 test('estimation form exposes unknown state and requires a real heating signal without enabling itself', async () => {
   const { EstimationForm } = await import('../src/EstimationForm.js');
   const { getDevice, ingestSnapshot } = await import('../server/energy.js');

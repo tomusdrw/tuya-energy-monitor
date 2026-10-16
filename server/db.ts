@@ -4,7 +4,7 @@ export function openDatabase(path: string): DatabaseSync {
   const db = new DatabaseSync(path);
   const version = (db.prepare('PRAGMA user_version').get() as { user_version: number })
     .user_version;
-  if (version > 2) {
+  if (version > 3) {
     db.close();
     throw new Error('Unsupported database version');
   }
@@ -72,6 +72,20 @@ export function openDatabase(path: string): DatabaseSync {
       );
       PRAGMA user_version=2;
     `);
+    });
+  if (version < 3)
+    transaction(db, () => {
+      db.exec(`
+        ALTER TABLE devices ADD COLUMN incremental_since INTEGER;
+        ALTER TABLE devices ADD COLUMN energy_stream_at INTEGER;
+        CREATE TABLE energy_reports (
+          device_id TEXT NOT NULL REFERENCES devices(id), code TEXT NOT NULL, report_id TEXT NOT NULL,
+          at INTEGER NOT NULL, kwh REAL NOT NULL CHECK(kwh>=0), received_at INTEGER NOT NULL,
+          PRIMARY KEY(device_id,code,report_id)
+        );
+        CREATE INDEX energy_reports_range ON energy_reports(device_id,at);
+        PRAGMA user_version=3;
+      `);
     });
   return db;
 }
