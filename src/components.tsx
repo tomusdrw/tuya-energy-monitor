@@ -47,6 +47,6 @@ export function HomeCard({ home }: { home: HomeView }) {
 
 export function AlertList({ items }: { items: NotificationView[] }) {
   if (!items.length) return <Empty title="Tutaj pojawią się powiadomienia">Ustaw próg w mieszkaniu. Wykrywanie anomalii zacznie działać po zebraniu co najmniej 7 porównywalnych dni.</Empty>;
-  const labels: Record<string, string> = { pending: 'Oczekuje', sent: 'Wysłano', retry: 'Ponowna próba', uncertain: 'Sprawdź dostarczenie', failed: 'Błąd wysyłki' };
+  const labels: Record<string, string> = { pending: 'Oczekuje', sent: 'Wysłano', retry: 'Ponowna próba', uncertain: 'Sprawdź dostarczenie', failed: 'Błąd wysyłki', expired: 'Przeterminowane' };
   return <div className="alert-list">{items.map(item => <article className="alert-item" key={item.id}><span className={`alert-icon ${item.kind === 'weekly' ? 'blue' : ''}`}>{item.kind === 'weekly' ? <CheckCircle2 size={21} /> : <AlertTriangle size={21} />}</span><div className="alert-content"><div className="alert-heading"><h3>{item.homeId ? <a href={`#home/${item.homeId}`}>{item.title}</a> : item.title}</h3><Badge tone={item.status === 'sent' ? 'success' : 'warning'}>{labels[item.status] ?? item.status}</Badge></div><time>{date(item.createdAt)}</time><details><summary>Szczegóły powiadomienia</summary><p className="pre-line">{item.body}</p>{item.error && <p className="error-text">{item.error}</p>}</details></div></article>)}</div>;
 }

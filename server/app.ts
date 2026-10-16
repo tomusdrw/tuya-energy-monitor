@@ -14,6 +14,7 @@ import { accounts, getOverview, getHome, getDevice, notifications, TIMEZONE } fr
 import { emailConfigured, type Config } from './config.js';
 import { callTuya, sessionSchema, type TuyaCall, type TuyaSession } from './tuya.js';
 import { Collector } from './collector.js';
+import { evaluateNotifications, deliverPending } from './notifications.js';
 
 interface Dependencies { db?: DatabaseSync; background?: boolean; tuya?: TuyaCall }
 const rulesSchema = z.object({ dailyLimit: z.number().positive().max(100000).nullable(),
@@ -38,6 +39,11 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
   const app = Fastify({ logger: false, bodyLimit: 16384, requestTimeout: 200000 });
   const tuya = dependencies.tuya ?? ((operation, payload) => callTuya(operation, payload, config.python));
   const collector = new Collector(db, config, tuya);
+  collector.afterSync = async () => {
+    const now = Date.now();
+    evaluateNotifications(db, now);
+    await deliverPending(db, config, now);
+  };
   const flows = new Map<string, { userCode: string; qrcode: string; label: string; owner: string; expires: number; accountId?: string; busy: boolean }>();
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
