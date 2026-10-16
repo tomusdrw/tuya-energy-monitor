@@ -289,3 +289,75 @@ test('estimation configuration is private, validates mappings and power, and nev
     await app.close();
   }
 });
+
+test('slow email delivery never stalls collection or starts concurrent outbox deliveries', async (t) => {
+  const db = openDatabase(':memory:');
+  const session = {
+    user_code: 'test',
+    terminal_id: 'test',
+    endpoint: 'https://apigw.tuyaeu.com',
+    token_info: {
+      t: 0,
+      uid: 'test',
+      expire_time: 9999999999,
+      access_token: 'fake',
+      refresh_token: 'fake',
+    },
+  };
+  db.prepare('INSERT INTO accounts(id,label,secret) VALUES(?,?,?)').run(
+    'a',
+    'A',
+    encrypt(session, config.encryptionKey),
+  );
+  db.prepare(
+    "INSERT INTO notifications(id,kind,title,body,created_at) VALUES('queued','threshold','Test','Test',?)",
+  ).run(Date.now());
+  let release: (r: Response) => void = () => {};
+  const pending = new Promise<Response>((resolve) => {
+    release = resolve;
+  });
+  let deliveries = 0,
+    reads = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    deliveries++;
+    return deliveries === 1 ? pending : Response.json({ id: 'mail' });
+  });
+  const app = await createApp(
+    { ...config, resendKey: 'fake', emailFrom: 'test@example.com', emailTo: 'test@example.com' },
+    {
+      db,
+      background: false,
+      tuya: async () => {
+        reads++;
+        return { ok: true, snapshot: { homes: [] } };
+      },
+    },
+  );
+  try {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      headers: { origin: config.origin },
+      payload: { password: config.password },
+    });
+    const headers = {
+      cookie: String(res.headers['set-cookie']).split(';')[0],
+      origin: config.origin,
+    };
+    await app.inject({ method: 'POST', url: '/api/sync', headers, payload: {} });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(deliveries, 1);
+    assert.equal(
+      (await app.inject({ url: '/api/settings', headers })).json().syncing,
+      false,
+      'Collection must finish while Resend is still pending',
+    );
+    await app.inject({ method: 'POST', url: '/api/sync', headers, payload: {} });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(reads, 2, 'The next cloud poll completes before the first email response');
+    assert.equal(deliveries, 1, 'Only one delivery job may own the outbox at a time');
+  } finally {
+    release(Response.json({ id: 'mail' }));
+    await app.close();
+  }
+});

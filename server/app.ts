@@ -59,10 +59,18 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
   const tuya =
     dependencies.tuya ?? ((operation, payload) => callTuya(operation, payload, config.python));
   const collector = new Collector(db, config, tuya);
+  let delivery: Promise<void> | null = null;
   collector.afterSync = async () => {
     const now = Date.now();
     evaluateNotifications(db, now);
-    await deliverPending(db, config, now);
+    // Keep one outbox owner, independently of the minute-by-minute collector.
+    // Slow email responses must not turn healthy relay observations into gaps.
+    if (!delivery)
+      delivery = deliverPending(db, config, now)
+        .catch(() => {})
+        .finally(() => {
+          delivery = null;
+        });
   };
   const flows = new Map<
     string,
@@ -322,6 +330,7 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
   );
   app.addHook('onClose', async () => {
     await collector.stop();
+    await delivery; // The sender must finish before its database is closed.
     flows.clear();
     db.close();
   });

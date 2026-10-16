@@ -9,7 +9,7 @@ export class Collector {
   private running: Promise<void> | null = null;
   private timer: NodeJS.Timeout | null = null;
   private stopped = false;
-  private lastInventory = new Map<string, number>();
+  private lastInventoryAttempt = new Map<string, number>();
   private runningFull = false;
   private fullRequested = false;
   afterSync: () => Promise<void> = async () => {};
@@ -51,7 +51,7 @@ export class Collector {
       if (this.stopped) break;
       const full =
         forceFull ||
-        this.clock() - (this.lastInventory.get(account.id) ?? -Infinity) >=
+        this.clock() - (this.lastInventoryAttempt.get(account.id) ?? -Infinity) >=
           this.config.pollSeconds * 1000;
       const requestedIds = (
         this.db
@@ -62,6 +62,8 @@ export class Collector {
           .all(account.id) as { remote_id: string }[]
       ).map((d) => d.remote_id);
       if (!full && !requestedIds.length) continue;
+      // A broken inventory/specification endpoint must not starve relay polling.
+      if (full) this.lastInventoryAttempt.set(account.id, this.clock());
       let activeSecret = account.secret;
       try {
         const session = sessionSchema.parse(decrypt(account.secret, this.config.encryptionKey));
@@ -82,7 +84,6 @@ export class Collector {
         const at = this.clock();
         if (full) {
           ingestSnapshot(this.db, account.id, response.snapshot, at);
-          this.lastInventory.set(account.id, at);
         } else ingestHeatingSnapshot(this.db, account.id, response.states, requestedIds, at);
       } catch {
         const current = this.db

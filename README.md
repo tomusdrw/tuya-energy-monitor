@@ -50,7 +50,10 @@ data directory must be writable by that user.
 Accounts and devices remain scoped to their account, even if names match.
 Background collection refreshes inventory and energy counters every five minutes,
 and polls enabled runtime estimators every 60 seconds in batches of 20 devices.
-Requests are serialized; slow cloud responses can delay a cycle.
+Cloud requests are serialized; slow cloud responses can delay a cycle. Failed
+inventory attempts retry on the five-minute cadence without suppressing relay
+polls. Email delivery has its own serialized job so Resend delays do not block
+state collection.
 No local network access to the apartments is needed. Cloud errors are displayed;
 expired authorization can be renewed with **Połącz ponownie**. Credentials are
 encrypted with AES-256-GCM before storage and never returned to the browser.

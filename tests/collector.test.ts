@@ -188,3 +188,68 @@ test('an error from an old request cannot mark a reconnected account as failing'
   await f.collector.stop();
   f.db.close();
 });
+
+test('a failed inventory refresh preserves minute relay polling and retries inventory on its own cadence', async () => {
+  const calls: string[] = [];
+  let firstInventory = true;
+  const f = fixture(async (operation) => {
+    calls.push(operation);
+    if (operation === 'states') return { ok: true, states: [device] };
+    if (firstInventory) {
+      firstInventory = false;
+      return { ok: true, snapshot };
+    }
+    return { ok: false }; // An unrelated device's specification endpoint is broken.
+  });
+  try {
+    await f.collector.sync(false);
+    const d = devicesFor(f.db).find((d) => d.remote_id === 'd')!;
+    configureEstimation(
+      f.db,
+      d.id,
+      {
+        enabled: true,
+        ratedPowerKw: 2,
+        heatingCode: 'work_state',
+        onValues: ['heating'],
+        offValues: ['idle'],
+      },
+      f.now(),
+    );
+    for (let i = 0; i < 5; i++) {
+      f.advance();
+      await f.collector.sync(false);
+    }
+    assert.equal(getDevice(f.db, d.id, f.now())?.estimation.state, 'unknown');
+    f.advance();
+    await f.collector.sync(false);
+    assert.equal(calls.at(-1), 'states', 'Failure must not starve the independent relay endpoint');
+    assert.equal(getDevice(f.db, d.id, f.now())?.estimation.state, 'on');
+    for (let i = 0; i < 4; i++) {
+      f.advance();
+      await f.collector.sync(false);
+    }
+    assert.deepEqual(calls, [
+      'read',
+      'states',
+      'states',
+      'states',
+      'states',
+      'read',
+      'states',
+      'states',
+      'states',
+      'states',
+      'read',
+    ]);
+    const stats = usage(f.db, devicesFor(f.db), f.now() - 10 * minute, f.now(), f.now());
+    assert.equal(stats.estimatedKwh, 0.2, 'Only the six minutes bounded by healthy readings count');
+    assert.ok(
+      (f.db.prepare('SELECT error FROM accounts').get() as any).error,
+      'Inventory failure remains visible',
+    );
+  } finally {
+    await f.collector.stop();
+    f.db.close();
+  }
+});
