@@ -15,7 +15,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 python3
     && rm -rf /var/lib/apt/lists/* \
     && python3 -m venv /opt/tuya
 COPY bridge/requirements.txt /tmp/tuya-requirements.txt
-RUN /opt/tuya/bin/pip install --no-cache-dir -r /tmp/tuya-requirements.txt
+RUN /opt/tuya/bin/pip install --no-cache-dir -r /tmp/tuya-requirements.txt \
+    && /opt/tuya/bin/python -c 'from tuya_sharing.user import LoginControl'
 WORKDIR /app
 COPY --from=build --chown=node:node /app/package.json ./
 COPY --from=build --chown=node:node /app/node_modules ./node_modules

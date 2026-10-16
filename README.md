@@ -170,7 +170,7 @@ python3 -m venv .venv
 cp .env.example .env
 # Fill required variables and set PYTHON_BIN=.venv/bin/python.
 npm test
-python3 -m unittest discover -s bridge
+.venv/bin/python -m unittest discover -s bridge
 npm run build
 npm start
 ```

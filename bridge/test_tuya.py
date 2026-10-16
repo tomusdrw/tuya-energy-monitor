@@ -1,5 +1,10 @@
 import unittest
-from tuya import normalize_device
+from tuya import normalize_device, run
+
+
+class AdapterRuntimeTests(unittest.TestCase):
+    def test_adapter_can_load_sdk_without_making_cloud_requests(self):
+        self.assertEqual(run({'operation': 'unsupported'}), {'ok': False})
 
 
 class DeviceTests(unittest.TestCase):
