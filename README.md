@@ -48,10 +48,56 @@ data directory must be writable by that user.
   enabled by default. Adjust or disable anomaly detection in the same form.
 
 Accounts and devices remain scoped to their account, even if names match.
-Polling runs in the background every five minutes after the preceding cycle.
+Background collection refreshes inventory and energy counters every five minutes,
+and polls enabled runtime estimators every 60 seconds in batches of 20 devices.
+Requests are serialized; slow cloud responses can delay a cycle.
 No local network access to the apartments is needed. Cloud errors are displayed;
 expired authorization can be renewed with **Połącz ponownie**. Credentials are
 encrypted with AES-256-GCM before storage and never returned to the browser.
+
+## Thermostat runtime estimates
+
+In **Mieszkania → device → Estymacja z czasu grzania**:
+
+1. Expand **Dostępne pola i ostatnie stany**. Confirm a field that actually reports
+   the heating relay, such as `work_state`. A general `switch`, selected mode or
+   temperature setpoint is **not** evidence that the heater is drawing power.
+2. Enter the total rated **heating circuit power in kW** (for example 1200 W =
+   1.2 kW), not the thermostat's own power or maximum relay rating. Power has no
+   default and cannot be inferred from room temperature.
+3. Select the field and its exact ON/OFF values. The form accepts JSON arrays:
+   `["heating"]` / `["standby", "idle"]`, `[true]` / `[false]`, or `[1]` / `[0]`.
+   Strings, numbers and booleans are distinct. Confirm any suggested mapping
+   against the actual device. Unsupported values remain unknown.
+4. Enable and save. The first new observation establishes a baseline; consecutive
+   valid observations produce estimates. Device history includes daily kWh and
+   the panel shows today's and lifetime observed heating hours.
+
+**Estimated kWh = rated kW × observed heating hours.** A known previous state
+owns the interval until the next known, online observation, at most 180 seconds
+later. ON→OFF closes an ON interval; OFF→ON closes an observed zero interval.
+Missing fields, unknown values, offline/omitted devices and failed requests
+break continuity immediately. A short restart can bridge up to 180 seconds using
+persisted state; longer gaps stay missing. Nothing is extrapolated after the last
+observation. Polling can miss short cycles, transitions are only approximated,
+and Tuya may return cached state. This is for overuse detection, not billing.
+
+Each estimate stores its original kWh, ON time and configuration revision.
+Changing power, mapping or enablement starts a new baseline and affects future
+estimates only. Previous energy is never recalculated. A real cumulative meter
+always takes precedence for the same device. Totals containing estimates use
+**≈**, with measured/estimated components and coverage shown separately in
+cards, chart tooltips and notifications. Coverage measures observed time, not
+accuracy of the rated-power assumption.
+
+The existing sharing-cloud credentials are reused. Local TinyTuya/MQTT push is
+not implemented: this installation has no access to the apartments' LANs. The
+adapter performs read-only cloud polling; no device commands are sent. The
+runtime method **requires an exposed relay signal**. If the current API returns
+only a thermostat switch and temperature settings, enabling estimation cannot
+recover that missing signal; the panel explicitly stays unknown. Raw recent
+observations are available in the device detail for diagnostics, and complete
+history remains in SQLite `heating_observations` and `intervals`.
 
 ## What the numbers mean
 
@@ -67,11 +113,12 @@ encrypted with AES-256-GCM before storage and never returned to the browser.
 - Five-minute intervals crossing midnight are allocated proportionally. Daily
   values are therefore estimates at polling resolution. Warsaw calendar days
   respect daylight saving changes.
-- Coverage is the measured fraction of time across selected devices. A partial
-  total is an observed subtotal, never an estimate of missing heaters. `—`
+- Coverage is the observed fraction of time across selected devices, including
+  configured runtime estimates. A partial
+  total is an observed subtotal, never a projection for missing heaters. `—`
   means unavailable; `0` requires actual consecutive valid readings.
 - Device inclusion applies to the currently displayed historical totals too.
-  Anomalies require adequate history for the current set of metered devices.
+  Anomalies require adequate history for the current set of measured and configured estimated devices.
 - Past Smart Life app statistics and thermostat-specific monthly fields are
   not imported. No tariff or billing calculation is performed.
 
@@ -89,10 +136,11 @@ contributions and a direct link.
 
 Anomalies default to a 14-day window, a 50% increase and at least 3 kWh extra.
 Both conditions must hold. At least seven prior days and today's elapsed period
-must have 95% coverage **for every compared meter**. The comparison uses the
+must have 95% coverage **for every compared device** with the same current source and estimation
+configuration revision. The comparison uses the
 same local time of day and begins after 30 minutes. Windows with different actual
 durations across a daylight-saving change are excluded; this can suspend anomaly
-detection on the transition day. A new meter or data gap can
+detection on the transition day. A new meter, changed power/mapping or data gap can
 delay the baseline; lack of an alert does not establish normal consumption.
 
 Weekly summaries are due Monday after 08:00 Europe/Warsaw, with catch-up after
@@ -159,7 +207,11 @@ Test restores before relying on a backup. Retain the encryption key across
 upgrades; a different key cannot decrypt existing accounts and startup fails.
 Changing the admin password invalidates sessions on the next startup.
 
-Run one process per database. Raw readings and intervals are retained; size grows
+Schema v2 migrates existing readings and intervals additively, marking prior
+intervals as measured. Back up before upgrading; do not run an older application
+against a migrated database.
+
+Run one process per database. Raw readings, heating observations and intervals are retained; size grows
 with time and the number of devices. Schedule volume backups and monitor disk
 space. The first version has no data retention or account deletion UI.
 

@@ -25,7 +25,8 @@ import {
   EnergyChart,
   HomeCard,
   Empty,
-  number,
+  energyNumber,
+  EnergyBreakdown,
   Coverage,
   Range,
   date,
@@ -157,8 +158,9 @@ export function Dashboard({
             <div className="stat featured">
               <span>Zaobserwowane dzisiaj</span>
               <strong>
-                {number(data.stats.kwh)} <small>kWh</small>
+                {energyNumber(data.stats)} <small>kWh</small>
               </strong>
+              <EnergyBreakdown stats={data.stats} />
               <Coverage stats={data.stats} />
             </div>
             <div className="stat">
@@ -170,9 +172,9 @@ export function Dashboard({
               </p>
             </div>
             <div className="stat">
-              <span>Urządzenia z licznikiem</span>
+              <span>Urządzenia z odczytem energii</span>
               <strong>
-                {data.stats.metered}
+                {data.stats.metered + data.stats.estimated}
                 <small> / {data.stats.monitored}</small>
               </strong>
               <p>{data.stats.fresh} z aktualnym połączeniem</p>
@@ -197,8 +199,8 @@ export function Dashboard({
                   ? 'Czekamy na pierwsze pomiary zużycia.'
                   : 'Ta suma obejmuje tylko dostępne pomiary.'}
               </strong>{' '}
-              Urządzenia bez licznika, przerwy w odczytach i czas sprzed uruchomienia monitoringu
-              nie są liczone jako zero.
+              Urządzenia bez licznika lub skonfigurowanej estymacji, przerwy w odczytach i czas
+              sprzed uruchomienia monitoringu nie są liczone jako zero.
             </Notice>
           )}
           <div className="panel">
@@ -418,7 +420,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         </main>
         <footer className="app-footer">
           <span>Tuya Energy Monitor</span>
-          <span>Europe/Warsaw · Odczyt co 5 minut</span>
+          <span>Europe/Warsaw · Stany co 60 s · Liczniki co 5 min</span>
         </footer>
       </div>
     </div>

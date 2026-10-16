@@ -278,3 +278,64 @@ test('uncertain attempts older than 24 hours are not retried and disabled mail m
   assert.equal((f.db.prepare('SELECT status FROM notifications').get() as any).status, 'uncertain');
   f.db.close();
 });
+
+test('thresholds and weekly summaries label estimated contributions and split mixed-source totals', () => {
+  const f = fixture();
+  f.interval('2026-10-16', 10, now - 60000);
+  f.db
+    .prepare(
+      'INSERT INTO intervals(device_id,start,end,kwh,source,on_ms,config_revision) VALUES(?,?,?,?,?,?,?)',
+    )
+    .run(f.device, now - 60000, now, 4, 'estimated', 60000, 1);
+  f.db.prepare('UPDATE homes SET daily_limit=13,anomaly_enabled=0').run();
+  evaluateNotifications(f.db, now);
+  const alert = f.db.prepare("SELECT body FROM notifications WHERE kind='threshold'").get() as any;
+  assert.match(alert.body, /≈ 14,00 kWh/);
+  assert.match(alert.body, /pomiar: 10,00 kWh/i);
+  assert.match(alert.body, /estymacja: 4,00 kWh/i);
+  assert.match(alert.body, /Heater: ≈ 14,00 kWh/);
+  evaluateNotifications(f.db, Date.parse('2026-10-19T06:05Z'));
+  const weekly = f.db
+    .prepare("SELECT body FROM notifications WHERE id='weekly/2026-10-12'")
+    .get() as any;
+  assert.match(weekly.body, /≈ 14,00 kWh/);
+  assert.match(weekly.body, /estymacja: 4,00 kWh/i);
+  f.db.close();
+});
+
+test('runtime anomalies require history from the same source and configuration, including today', async () => {
+  const { configureEstimation, recordHeatingState } = await import('../server/estimation.js');
+  const f = fixture();
+  f.db.prepare("UPDATE devices SET energy_kind='unsupported',status_updated_at=?").run(now - 60000);
+  configureEstimation(
+    f.db,
+    f.device,
+    {
+      enabled: true,
+      ratedPowerKw: 2,
+      heatingCode: 'work_state',
+      onValues: ['heat'],
+      offValues: ['idle'],
+    },
+    now - 10 * 86400000,
+  );
+  recordHeatingState(f.db, f.device, [{ code: 'work_state', value: 'heat' }], true, now);
+  for (let day = 9; day <= 15; day++) f.interval(`2026-10-${String(day).padStart(2, '0')}`, 8);
+  f.interval('2026-10-16', 8, now);
+  f.db.exec("UPDATE intervals SET source='estimated',config_revision=1,on_ms=end-start");
+  evaluateNotifications(f.db, now);
+  assert.equal(f.db.prepare("SELECT id FROM notifications WHERE kind='anomaly'").all().length, 1);
+  f.db.exec("DELETE FROM notifications WHERE kind='anomaly'");
+  f.db.prepare('UPDATE intervals SET config_revision=0 WHERE end<?').run(now);
+  evaluateNotifications(f.db, now);
+  assert.equal(f.db.prepare("SELECT id FROM notifications WHERE kind='anomaly'").all().length, 0);
+  f.db.exec("UPDATE intervals SET config_revision=1,source='measured'");
+  f.db.prepare("UPDATE intervals SET source='estimated' WHERE end=?").run(now);
+  evaluateNotifications(f.db, now);
+  assert.equal(f.db.prepare("SELECT id FROM notifications WHERE kind='anomaly'").all().length, 0);
+  f.db.exec("UPDATE intervals SET source='estimated'");
+  f.db.prepare('UPDATE intervals SET config_revision=0 WHERE end=?').run(now);
+  evaluateNotifications(f.db, now);
+  assert.equal(f.db.prepare("SELECT id FROM notifications WHERE kind='anomaly'").all().length, 0);
+  f.db.close();
+});

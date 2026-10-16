@@ -13,10 +13,16 @@ import {
   MAX_GAP,
 } from './energy.js';
 import { digest } from './crypto.js';
+import { energySource, currentHeatingState } from './estimation.js';
+import type { EnergyStats } from '../shared/types.js';
 import { emailConfigured, type Config } from './config.js';
 
 const format = (n: number | null) =>
   n === null ? 'brak danych' : `${n.toFixed(2).replace('.', ',')} kWh`;
+const energy = (stats: EnergyStats) =>
+  `${stats.estimatedKwh !== null ? '≈ ' : ''}${format(stats.kwh)}`;
+const sources = (stats: EnergyStats) =>
+  `Pomiar: ${format(stats.measuredKwh)}; estymacja: ${format(stats.estimatedKwh)}.`;
 const coverage = (n: number) => `${Math.round(n * 100)}%`;
 type Row = Record<string, any>;
 
@@ -47,15 +53,15 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
         end = Math.min(bounds.end, now);
       const stats = usage(db, selected, start, end, now);
       const contributors = selected
-        .map((d) => ({ name: d.name, kwh: usage(db, [d], start, end, now).kwh }))
-        .filter((d) => d.kwh !== null)
-        .sort((a, b) => b.kwh! - a.kwh!)
+        .map((d) => ({ name: d.name, stats: usage(db, [d], start, end, now) }))
+        .filter((d) => d.stats.kwh !== null)
+        .sort((a, b) => b.stats.kwh! - a.stats.kwh!)
         .slice(0, 5)
-        .map((d) => `• ${d.name}: ${format(d.kwh)}`)
+        .map((d) => `• ${d.name}: ${energy(d.stats)} (${sources(d.stats)})`)
         .join('\n');
       const details =
-        `Mieszkanie: ${home.name}\nDzień: ${day}\nZaobserwowane zużycie: ${format(stats.kwh)}\n` +
-        `Zakres: ${stats.metered}/${stats.monitored} urządzeń z licznikiem; pokrycie czasu ${coverage(stats.coverage)}.\n` +
+        `Mieszkanie: ${home.name}\nDzień: ${day}\nZaobserwowane zużycie: ${energy(stats)}\n${sources(stats)}\n` +
+        `Zakres: ${stats.metered} liczników, ${stats.estimated} estymowanych / ${stats.monitored} wybranych urządzeń; pokrycie czasu ${coverage(stats.coverage)}.\n` +
         (stats.complete ? '' : 'Suma częściowa. Brakujące pomiary nie są zerowym zużyciem.\n') +
         `\nNajwiększy udział w sumie:\n${contributors || 'Brak dostępnych odczytów.'}`;
       if (
@@ -73,10 +79,12 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
           now,
         );
       }
-      const meters = selected.filter((d) => d.energy_kind === 'cumulative');
+      const meters = selected.filter((d) => energySource(d) !== 'missing');
       const everyMeterCovered = (from: number, to: number) =>
-        meters.every((meter) => usage(db, [meter], from, to, now).coverage >= 0.95);
-      const current = usage(db, meters, start, end, now);
+        meters.every(
+          (meter) => usage(db, [meter], from, to, now, { comparable: true }).coverage >= 0.95,
+        );
+      const current = usage(db, meters, start, end, now, { comparable: true });
       if (
         !home.rules.anomalyEnabled ||
         !meters.length ||
@@ -100,7 +108,9 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
         // Equal wall-clock cutoffs can span different durations across a DST change.
         // Such days are not comparable; do not manufacture a rate-adjusted baseline.
         if (comparisonEnd - priorBounds.start !== end - start) continue;
-        const prior = usage(db, meters, priorBounds.start, comparisonEnd, now);
+        const prior = usage(db, meters, priorBounds.start, comparisonEnd, now, {
+          comparable: true,
+        });
         if (prior.kwh !== null && everyMeterCovered(priorBounds.start, comparisonEnd))
           comparable.push(prior.kwh);
       }
@@ -116,7 +126,7 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
           home.id,
           'anomaly',
           `Nietypowe zużycie: ${home.name}`,
-          `${details}\n\nŚrednia do tej samej pory: ${format(average)} (${comparable.length} porównywalnych dni).\n` +
+          `${details}\n\nZużycie w porównaniu (bieżąca konfiguracja): ${energy(current)}.\nŚrednia do tej samej pory: ${current.estimatedKwh !== null ? '≈ ' : ''}${format(average)} (${comparable.length} porównywalnych dni).\n` +
             `Warunki: wzrost o co najmniej ${home.rules.increasePercent}% i ${format(home.rules.increaseKwh)}.`,
           now,
         );
@@ -142,12 +152,15 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
       now,
     );
     return (
-      `${home.name} (${home.accountLabel}): ${format(current.kwh)}; pokrycie ${coverage(current.coverage)}.\n` +
-      `  Poprzedni tydzień: ${format(before.kwh)}; pokrycie ${coverage(before.coverage)}.`
+      `${home.name} (${home.accountLabel}): ${energy(current)}; pokrycie ${coverage(current.coverage)}. ${sources(current)}\n` +
+      `  Poprzedni tydzień: ${energy(before)}; pokrycie ${coverage(before.coverage)}. ${sources(before)}`
     );
   });
   const monitored = devicesFor(db).filter((d) => d.included);
-  const unsupported = monitored.filter((d) => d.energy_kind !== 'cumulative');
+  const unsupported = monitored.filter((d) => energySource(d) === 'missing');
+  const unknown = monitored.filter(
+    (d) => energySource(d) === 'estimated' && currentHeatingState(db, d, now) === 'unknown',
+  );
   const stale = monitored.filter(
     (d) => !d.online || !d.present || now - (d.last_seen ?? 0) > MAX_GAP,
   );
@@ -160,9 +173,10 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
   const body =
     `Podsumowanie okresu ${weekStart} – ${previousDate(weekEnd, 1)} (${TIMEZONE}).\n\n` +
     `${lines.join('\n\n') || 'Brak mieszkań.'}\n\nStan monitorowania:\n${accountHealth}\n` +
-    `Bez pomiaru energii: ${unsupported.length}${unsupported.length ? ` (${unsupported.map((d) => d.name).join(', ')})` : ''}.\n` +
+    `Bez licznika lub konfiguracji estymacji: ${unsupported.length}${unsupported.length ? ` (${unsupported.map((d) => d.name).join(', ')})` : ''}.\n` +
+    `Estymacja bez aktualnego sygnału grzania: ${unknown.length}${unknown.length ? ` (${unknown.map((d) => d.name).join(', ')})` : ''}.\n` +
     `Offline lub nieaktualne: ${stale.length}${stale.length ? ` (${stale.map((d) => d.name).join(', ')})` : ''}.\n\n` +
-    'Niepełne sumy obejmują wyłącznie dostępne pomiary. Podsumowanie wysyłamy również wtedy, gdy nie było alertów.';
+    '≈ oznacza sumę zawierającą estymację: moc ogrzewania × zaobserwowany czas grzania. Niepełne sumy obejmują wyłącznie dostępne dane. Podsumowanie wysyłamy również wtedy, gdy nie było alertów.';
   enqueue(db, key, null, 'weekly', `Energia: podsumowanie tygodnia ${weekStart}`, body, now);
 }
 

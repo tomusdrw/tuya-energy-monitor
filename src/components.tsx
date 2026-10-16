@@ -121,12 +121,23 @@ export function PageTitle({
     </header>
   );
 }
+export const energyNumber = (stats: Pick<EnergyStats, 'kwh' | 'estimatedKwh'>) =>
+  `${stats.estimatedKwh !== null ? '≈ ' : ''}${number(stats.kwh)}`;
+export function EnergyBreakdown({ stats }: { stats: EnergyStats }) {
+  if (stats.estimatedKwh === null) return null;
+  return (
+    <div className="energy-breakdown">
+      <span>Pomiar: {number(stats.measuredKwh)} kWh</span>
+      <span>Estymacja: {number(stats.estimatedKwh)} kWh</span>
+    </div>
+  );
+}
 export function Coverage({ stats }: { stats: EnergyStats }) {
   return (
     <span className="coverage">
       <span className={`status-dot ${stats.complete ? 'green' : 'amber'}`} />
-      {stats.metered}/{stats.monitored} urządzeń z licznikiem · {percent(stats.coverage)} pokrycia
-      czasu
+      {stats.metered} z licznikiem · {stats.estimated} z estymacją / {stats.monitored} wybranych ·{' '}
+      {percent(stats.coverage)} pokrycia czasu
     </span>
   );
 }
@@ -151,8 +162,8 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
   if (!points.some((p) => p.kwh !== null))
     return (
       <Empty title="Historia właśnie się zaczyna">
-        Wykres pojawi się po dwóch poprawnych odczytach licznika. Nie pobieramy wcześniejszej
-        historii z aplikacji Tuya.
+        Wykres pojawi się po dwóch poprawnych odczytach licznika lub skonfigurowanego stanu grzania.
+        Nie pobieramy wcześniejszej historii z aplikacji Tuya.
       </Empty>
     );
   const max = Math.max(1, ...points.map((p) => p.kwh ?? 0));
@@ -189,21 +200,44 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
           const h = Math.max(p.kwh === null ? 2 : 3, ((p.kwh ?? 0) / max) * chartHeight);
           return (
             <g key={p.day}>
-              <rect
-                x={pad + i * slot + slot * 0.2}
-                y={175 - h}
-                width={slot * 0.6}
-                height={h}
-                rx={3}
-                className={
-                  p.kwh === null ? 'bar-missing' : p.coverage >= 0.95 ? 'bar' : 'bar-partial'
-                }
-              >
-                <title>
-                  {p.day}: {p.kwh === null ? 'brak danych' : `${number(p.kwh)} kWh`}, pokrycie{' '}
-                  {percent(p.coverage)}
-                </title>
-              </rect>
+              <title>
+                {p.day}: {p.kwh === null ? 'brak danych' : `${energyNumber(p)} kWh`}; pomiar:{' '}
+                {number(p.measuredKwh)} kWh; estymacja: {number(p.estimatedKwh)} kWh; pokrycie{' '}
+                {percent(p.coverage)}
+              </title>
+              {p.kwh === null ? (
+                <rect
+                  x={pad + i * slot + slot * 0.2}
+                  y={173}
+                  width={slot * 0.6}
+                  height={2}
+                  rx={2}
+                  className="bar-missing"
+                />
+              ) : (
+                <>
+                  {p.measuredKwh !== null && (
+                    <rect
+                      x={pad + i * slot + slot * 0.2}
+                      y={175 - Math.max(2, ((p.measuredKwh ?? 0) / max) * chartHeight)}
+                      width={slot * 0.6}
+                      height={Math.max(2, ((p.measuredKwh ?? 0) / max) * chartHeight)}
+                      rx={2}
+                      className={p.coverage >= 0.95 ? 'bar' : 'bar-partial'}
+                    />
+                  )}
+                  {p.estimatedKwh !== null && (
+                    <rect
+                      x={pad + i * slot + slot * 0.2}
+                      y={175 - h}
+                      width={slot * 0.6}
+                      height={Math.max(2, ((p.estimatedKwh ?? 0) / max) * chartHeight)}
+                      rx={2}
+                      className={p.coverage >= 0.95 ? 'bar-estimated' : 'bar-estimated partial'}
+                    />
+                  )}
+                </>
+              )}
               {(points.length <= 14 || i % 3 === 0 || i === points.length - 1) && (
                 <text
                   x={pad + i * slot + slot / 2}
@@ -221,16 +255,17 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
       <div className="chart-legend">
         <span>
           <i className="legend-blue" />
-          Pełny dzień
+          Licznik energii
         </span>
         <span>
-          <i className="legend-light" />
-          Częściowe dane
+          <i className="legend-purple" />
+          Czas grzania × moc
         </span>
         <span>
           <i className="legend-gray" />
           Brak danych
         </span>
+        <span>Jaśniejszy słupek = częściowe dane</span>
       </div>
     </div>
   );
@@ -260,11 +295,12 @@ export function HomeCard({ home }: { home: HomeView }) {
         {home.accountLabel} · {home.deviceCount} urządzeń
       </p>
       <div className="home-value">
-        {number(home.stats.kwh)}{' '}
+        {energyNumber(home.stats)}{' '}
         <span>
           kWh <small>dzisiaj</small>
         </span>
       </div>
+      <EnergyBreakdown stats={home.stats} />
       <div className={`meter ${exceeded ? 'exceeded' : ''}`}>
         <span
           style={{

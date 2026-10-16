@@ -21,12 +21,15 @@ import type {
   SettingsView,
 } from '../shared/types';
 import { api, useApi } from './api';
+import { EstimationForm } from './EstimationForm';
 import {
   AlertList,
   Badge,
   Coverage,
   Empty,
   EnergyChart,
+  EnergyBreakdown,
+  energyNumber,
   Loading,
   Notice,
   PageTitle,
@@ -172,8 +175,9 @@ export function HomePage({ id }: { id: string }) {
         <div className="stat featured">
           <span>Zaobserwowane dzisiaj</span>
           <strong>
-            {number(home.stats.kwh)} <small>kWh</small>
+            {energyNumber(home.stats)} <small>kWh</small>
           </strong>
+          <EnergyBreakdown stats={home.stats} />
           <Coverage stats={home.stats} />
         </div>
         <div className="stat">
@@ -195,9 +199,8 @@ export function HomePage({ id }: { id: string }) {
       </div>
       {!home.stats.complete && (
         <Notice tone="warning">
-          Suma jest częściowa. Obejmuje dostępne odczyty z {home.stats.metered} z{' '}
-          {home.stats.monitored} wybranych urządzeń. Przerwy i brak energii z termostatów pozostają
-          brakami danych.
+          Suma jest częściowa. Obejmuje pomiary liczników i włączone estymacje. Przerwy w odczytach
+          oraz urządzenia bez źródła energii pozostają brakami danych.
         </Notice>
       )}
       <div className="panel">
@@ -238,16 +241,28 @@ export function HomePage({ id }: { id: string }) {
                   </div>
                 </div>
                 <span>
-                  <Badge tone={d.energyKind === 'cumulative' ? 'success' : 'warning'}>
-                    {d.energyKind === 'cumulative'
-                      ? 'Licznik kWh'
-                      : d.energyKind === 'incremental'
-                        ? 'Nieobsługiwane raporty'
-                        : 'Brak energii'}
+                  <Badge
+                    tone={
+                      d.energySource === 'measured'
+                        ? 'success'
+                        : d.energySource === 'estimated'
+                          ? 'blue'
+                          : 'warning'
+                    }
+                  >
+                    {d.energySource === 'estimated'
+                      ? d.heatingState === 'unknown'
+                        ? 'Estymacja: brak sygnału'
+                        : 'Estymacja kWh'
+                      : d.energyKind === 'cumulative'
+                        ? 'Licznik kWh'
+                        : d.energyKind === 'incremental'
+                          ? 'Nieobsługiwane raporty'
+                          : 'Brak energii'}
                   </Badge>
                 </span>
                 <span className="tabular">
-                  {number(d.stats.kwh)} <small>kWh</small>
+                  {energyNumber(d.stats)} <small>kWh</small>
                 </span>
                 <span className="subtle">{date(d.lastSeen)}</span>
                 <ChevronRight size={17} />
@@ -301,8 +316,9 @@ export function DevicePage({ id }: { id: string }) {
         <div className="stat featured">
           <span>Zaobserwowane dzisiaj</span>
           <strong>
-            {number(device.stats.kwh)} <small>kWh</small>
+            {energyNumber(device.stats)} <small>kWh</small>
           </strong>
+          <EnergyBreakdown stats={device.stats} />
           <p>{percent(device.stats.coverage)} pokrycia czasu</p>
         </div>
         <div className="stat">
@@ -324,14 +340,15 @@ export function DevicePage({ id }: { id: string }) {
           </p>
         </div>
       </div>
-      {device.energyKind !== 'cumulative' && (
+      {device.energySource === 'missing' && (
         <Notice tone="warning">
           {device.energyKind === 'incremental'
             ? 'To urządzenie udostępnia przyrostowe raporty energii. Okresowe odpytywanie nie pozwala ich bezpiecznie sumować.'
             : 'Obecne połączenie Tuya nie udostępnia licznika energii tego urządzenia.'}{' '}
-          Zużycie pozostaje nieznane.
+          Możesz skonfigurować estymację poniżej, jeśli dostępny jest sygnał aktywnego grzania.
         </Notice>
       )}
+      <EstimationForm key={device.id} device={device} onSaved={refresh} />
       <div className="panel">
         <SectionTitle title="Historia urządzenia">
           <Range days={days} setDays={setDays} />
@@ -626,8 +643,12 @@ export function SettingsPage() {
             <dd>{data.timezone}</dd>
           </div>
           <div>
-            <dt>Częstotliwość odczytu</dt>
+            <dt>Liczniki i lista urządzeń</dt>
             <dd>Co {data.pollSeconds / 60} minut</dd>
+          </div>
+          <div>
+            <dt>Stany grzania</dt>
+            <dd>Co {data.statusPollSeconds} sekund</dd>
           </div>
           <div>
             <dt>Adres aplikacji</dt>
@@ -646,13 +667,18 @@ export function SettingsPage() {
           przedziały na granicy dni dzielimy proporcjonalnie, więc dobowe wartości są przybliżeniem.
         </p>
         <p>
-          Brak licznika, urządzenie offline, reset i przerwa powyżej 15 minut pozostawiają lukę.
-          Pokrycie mówi, dla jakiej części czasu i wybranych urządzeń mamy pomiar. Wartość „—”
-          oznacza brak danych.
+          Estymacja (≈) to zadana moc w kW × zaobserwowany czas grzania w godzinach. Włączysz ją w
+          szczegółach urządzenia. Suma rozdziela pomiar licznika i szacunek; nie służy rozliczeniom.
+        </p>
+        <p>
+          Brak źródła energii, urządzenie offline i reset licznika pozostawiają lukę. Granica
+          przerwy to 15 minut dla liczników i 3 minuty dla estymacji. Pokrycie mówi, dla jakiej
+          części czasu i wybranych urządzeń mamy pomiar. Wartość „—” oznacza brak danych.
         </p>
         <p>
           Alert dzienny może dotyczyć częściowej sumy — wiadomość to zaznaczy. Anomalia wymaga
-          przynajmniej 7 porównywalnych dni z co najmniej 95% pokrycia dla urządzeń z licznikiem.
+          przynajmniej 7 porównywalnych dni z co najmniej 95% pokrycia dla każdego porównywanego
+          urządzenia. Zmiana mocy lub mapowania stanu wymaga nowej historii do porównań.
         </p>
         <p>
           Progi i wybór urządzeń ustawisz osobno w każdym mieszkaniu. Historia z aplikacji mobilnej
