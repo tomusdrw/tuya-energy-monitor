@@ -36,7 +36,7 @@ def normalize_device(device, specification, reports):
             result['temperature'] = value
         if code in ('cur_power', 'power') and unit in ('w', 'kw'):
             result['powerW'] = value * (1000 if unit == 'kw' else 1)
-        if unit not in ('kwh', 'wh') or value < 0:
+        if unit not in ('kwh', 'wh') or value < 0 or code not in CUMULATIVE_CODES | {'add_ele'}:
             continue
         if types.get(code) == 'sum':
             if result['energyKind'] == 'unsupported':
