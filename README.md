@@ -65,9 +65,11 @@ In **Mieszkania → device → Estymacja z czasu grzania**:
 1. Expand **Dostępne pola i ostatnie stany**. Confirm a field that actually reports
    the heating relay, such as `work_state`. A general `switch`, selected mode or
    temperature setpoint is **not** evidence that the heater is drawing power.
-2. Enter the total rated **heating circuit power in kW** (for example 1200 W =
-   1.2 kW), not the thermostat's own power or maximum relay rating. Power has no
-   default and cannot be inferred from room temperature.
+2. Set the total rated **heating circuit power in kW** (for example 1200 W =
+   1.2 kW), not the thermostat's own power or maximum relay rating. Thermostat
+   forms (`wk`) prefill **1.25 kW** when no power is saved, an editable assumption
+   within the owner's suggested 1–1.5 kW range. Existing configured values are
+   preserved. This default does not enable estimation or confirm a relay signal.
 3. Select the field and its exact ON/OFF values. The form accepts JSON arrays:
    `["heating"]` / `["standby", "idle"]`, `[true]` / `[false]`, or `[1]` / `[0]`.
    Strings, numbers and booleans are distinct. Confirm any suggested mapping

@@ -74,7 +74,7 @@ test('mixed totals identify estimates in dashboard, cards, chart and source brea
   db.close();
 });
 
-test('estimation form exposes unknown state and requires a real heating signal without guessing a power', async () => {
+test('estimation form exposes unknown state and requires a real heating signal without enabling itself', async () => {
   const { EstimationForm } = await import('../src/EstimationForm.js');
   const { getDevice, ingestSnapshot } = await import('../server/energy.js');
   const db = openDatabase(':memory:');

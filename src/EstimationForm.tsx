@@ -23,7 +23,8 @@ function parseValues(text: string): StatusValue[] {
 export function EstimationForm({ device, onSaved }: { device: DeviceDetail; onSaved: () => void }) {
   const e = device.estimation;
   const [enabled, setEnabled] = useState(e.enabled);
-  const [power, setPower] = useState(e.ratedPowerKw === null ? '' : String(e.ratedPowerKw));
+  const defaultPower = device.category === 'wk' ? 1.25 : '';
+  const [power, setPower] = useState(String(e.ratedPowerKw ?? defaultPower));
   const [code, setCode] = useState(e.heatingCode ?? '');
   const [on, setOn] = useState(JSON.stringify(e.onValues));
   const [off, setOff] = useState(JSON.stringify(e.offValues));
@@ -144,6 +145,12 @@ export function EstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
             </datalist>
           </label>
         </div>
+        {device.category === 'wk' && (
+          <p className="field-help">
+            Domyślnie 1,25 kW — moc założona. Możesz ją zmienić na łączną moc ogrzewania sterowanego
+            przez ten termostat.
+          </p>
+        )}
         {e.suggestion && (
           <button
             type="button"

@@ -10,7 +10,10 @@ heating hours. This is an estimate, never billing-grade metering.
 
 - Existing account credentials, names, homes and IDs are reused. The owner can
   configure each device's rated heating power, status code, and explicit ON/OFF
-  values in its detail page. Power is not guessed or enabled by default.
+  values in its detail page. The owner's follow-up requests an editable default
+  within 1–1.5 kW per thermostat. Builder choice: prefill 1.25 kW for thermostats
+  without configured power, label it as an assumption, and preserve saved values.
+  Estimation remains disabled until a real heating signal is configured.
 - Suggest recognized heating-state fields (for example work_state with
   heating/idle), but do not infer relay activity from thermostat power switch,
   selected mode, temperature or setpoint. Manual field mappings remain possible.
@@ -60,7 +63,8 @@ heating hours. This is an estimate, never billing-grade metering.
   available, current heating state, daily and cumulative observed ON time, and
   recent raw observations for diagnostics. Show available status fields and
   current values even while estimation is disabled, so the owner can choose a
-  real relay signal. No fabricated default powers or relay confirmations.
+  real relay signal. The power default is an explicit assumption, not a measured
+  value or relay confirmation.
 - Existing individual daily thresholds, rolling anomalies and weekly summaries
   include estimates and clearly label them. Preserve outbox/deduplication rules.
   No extra same-weekday anomaly subsystem is needed: the prompt gives examples,
