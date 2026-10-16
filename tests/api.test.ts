@@ -224,3 +224,67 @@ test('a failed cloud connection never replaces stored account credentials', asyn
   );
   await app.close();
 });
+
+test('estimation configuration is private, validates mappings and power, and never rewrites historical energy', async () => {
+  const { db, app, login } = await setup();
+  try {
+    db.exec(
+      "INSERT INTO accounts(id,label,secret) VALUES('a','A','unused'); INSERT INTO homes(id,account_id,remote_id,name) VALUES('h','a','h','H'); INSERT INTO devices(id,home_id,remote_id,name,category,included,online,energy_kind) VALUES('d','h','d','D','wk',1,1,'unsupported'); INSERT INTO intervals(device_id,start,end,kwh,source,on_ms,config_revision) VALUES('d',100,200,1,'estimated',100,0)",
+    );
+    const payload = {
+      enabled: true,
+      ratedPowerKw: 2,
+      heatingCode: 'work_state',
+      onValues: ['heat'],
+      offValues: ['idle'],
+    };
+    const url = '/api/devices/d/estimation';
+    assert.equal(
+      (await app.inject({ method: 'PUT', url, headers: { origin: config.origin }, payload }))
+        .statusCode,
+      401,
+    );
+    const cookie = String((await login()).headers['set-cookie']).split(';')[0];
+    const headers = { cookie, origin: config.origin };
+    for (const change of [
+      { ratedPowerKw: 0 },
+      { ratedPowerKw: -1 },
+      { ratedPowerKw: null },
+      { onValues: [] },
+      { offValues: ['heat'] },
+      { ratedPowerKw: 1001 },
+      { extra: true },
+    ]) {
+      assert.equal(
+        (await app.inject({ method: 'PUT', url, headers, payload: { ...payload, ...change } }))
+          .statusCode,
+        400,
+      );
+    }
+    assert.equal(
+      (
+        await app.inject({
+          method: 'PUT',
+          url,
+          headers: { cookie, origin: 'http://evil.example' },
+          payload,
+        })
+      ).statusCode,
+      403,
+    );
+    assert.equal((await app.inject({ method: 'PUT', url, headers, payload })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'PUT', url, headers, payload })).statusCode, 200);
+    const detail = (await app.inject({ url: '/api/devices/d', headers })).json();
+    assert.equal(detail.estimation.ratedPowerKw, 2);
+    assert.equal(detail.estimation.revision, 1, 'saving unchanged config keeps its baseline');
+    assert.equal(detail.estimation.state, 'unknown');
+    assert.equal((db.prepare('SELECT kwh FROM intervals').get() as any).kwh, 1);
+    assert.equal(
+      (await app.inject({ method: 'PUT', url: '/api/devices/absent/estimation', headers, payload }))
+        .statusCode,
+      404,
+    );
+  } finally {
+    await app.close();
+  }
+});

@@ -7,15 +7,22 @@ export interface Rules {
 }
 export interface EnergyStats {
   kwh: number | null;
+  measuredKwh: number | null;
+  estimatedKwh: number | null;
+  heatingHours: number | null;
   coverage: number;
   monitored: number;
   metered: number;
+  estimated: number;
   fresh: number;
   complete: boolean;
 }
 export interface HistoryPoint {
   day: string;
   kwh: number | null;
+  measuredKwh: number | null;
+  estimatedKwh: number | null;
+  heatingHours: number | null;
   coverage: number;
 }
 export interface AccountView {
@@ -43,6 +50,8 @@ export interface DeviceView {
   temperature: number | null;
   powerW: number | null;
   stats: EnergyStats;
+  energySource: 'measured' | 'estimated' | 'missing';
+  heatingState: 'on' | 'off' | 'unknown';
 }
 export interface HomeView {
   id: string;
@@ -60,6 +69,39 @@ export interface HomeDetail extends HomeView {
 export interface DeviceDetail extends DeviceView {
   homeName: string;
   history: HistoryPoint[];
+  estimation: EstimationView;
+}
+export type StatusValue = string | number | boolean;
+export interface StatusField {
+  code: string;
+  value: StatusValue;
+  values?: StatusValue[];
+}
+export interface EstimationConfig {
+  enabled: boolean;
+  ratedPowerKw: number | null;
+  heatingCode: string | null;
+  onValues: StatusValue[];
+  offValues: StatusValue[];
+}
+export interface EstimationView extends EstimationConfig {
+  revision: number;
+  source: DeviceView['energySource'];
+  state: DeviceView['heatingState'];
+  lastObservedAt: number | null;
+  statusUpdatedAt: number | null;
+  totalHeatingHours: number | null;
+  statusFields: StatusField[];
+  suggestion: Pick<EstimationConfig, 'heatingCode' | 'onValues' | 'offValues'> | null;
+  observations: {
+    at: number;
+    state: DeviceView['heatingState'];
+    rawValue: StatusValue | null;
+    code: string | null;
+    online: boolean;
+    revision: number;
+    ratedPowerKw: number | null;
+  }[];
 }
 export interface NotificationView {
   id: string;

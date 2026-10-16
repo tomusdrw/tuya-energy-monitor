@@ -14,6 +14,14 @@ import type {
 } from '../shared/types.js';
 import { scopedId } from './crypto.js';
 import { transaction } from './db.js';
+import {
+  recordHeatingState,
+  statusFieldsSchema,
+  energySource,
+  estimationView,
+  currentHeatingState,
+  MAX_HEATING_GAP,
+} from './estimation.js';
 
 export const TIMEZONE = 'Europe/Warsaw';
 export const MAX_GAP = 15 * 60000;
@@ -34,6 +42,7 @@ export const snapshotSchema = z.object({
           energyKind: z.enum(['cumulative', 'incremental', 'unsupported']),
           temperature: nullableNumber,
           powerW: nullableNumber,
+          statusFields: statusFieldsSchema.default([]),
         }),
       ),
     }),
@@ -86,6 +95,13 @@ export function ingestSnapshot(
           db.prepare('UPDATE devices SET present=1 WHERE id=?').run(id);
           continue;
         }
+        const previousDevice = db
+          .prepare('SELECT status_updated_at FROM devices WHERE id=?')
+          .get(id) as Row | undefined;
+        if (previousDevice?.status_updated_at > now) {
+          db.prepare('UPDATE devices SET present=1 WHERE id=?').run(id);
+          continue;
+        }
         const counter = device.energyKind === 'cumulative' ? device.counterKwh : null;
         const included =
           counter !== null || ['wk', 'qn', 'rs', 'dr', 'dlq'].includes(device.category);
@@ -130,6 +146,7 @@ export function ingestSnapshot(
             counter - last.counter_kwh,
           );
         }
+        recordHeatingState(db, id, device.statusFields, device.online, now);
       }
     }
     // A disappeared device is a known gap, even if it returns before MAX_GAP.
@@ -140,6 +157,12 @@ export function ingestSnapshot(
       WHERE h.account_id=? AND d.present=0
       AND NOT EXISTS (SELECT 1 FROM readings r WHERE r.device_id=d.id AND r.at>=?)`,
     ).run(now, accountId, now);
+    const absent = db
+      .prepare(
+        'SELECT d.id FROM devices d JOIN homes h ON h.id=d.home_id WHERE h.account_id=? AND d.present=0',
+      )
+      .all(accountId) as Row[];
+    for (const d of absent) recordHeatingState(db, d.id, [], false, now);
     db.prepare('UPDATE accounts SET last_sync=?,error=NULL WHERE id=?').run(now, accountId);
   });
 }
@@ -158,35 +181,79 @@ export function usage(
   start: number,
   end: number,
   now: number,
+  options: { comparable?: boolean } = {},
 ): EnergyStats {
-  let total = 0,
-    observed = 0,
+  let measured = 0,
+    estimated = 0,
+    onMs = 0,
     milliseconds = 0;
+  let measuredCount = 0,
+    estimatedCount = 0,
+    fresh = 0,
+    covered = 0;
   const selected = devices.filter((d) => d.included);
-  const meter = selected.filter((d) => d.energy_kind === 'cumulative');
-  const stmt = db.prepare(`SELECT SUM(kwh * (MIN(end,?) - MAX(start,?)) / (end-start)) AS kwh,
-    SUM(MIN(end,?) - MAX(start,?)) AS duration FROM intervals WHERE device_id=? AND end>? AND start<?`);
-  for (const device of selected) {
-    const row = stmt.get(end, start, end, start, device.id, start, end) as Row;
-    if (row.kwh !== null) {
-      observed++;
-      total += row.kwh;
-      milliseconds += row.duration;
+  const stmt = db.prepare(`SELECT source,
+    SUM(kwh * (MIN(end,?) - MAX(start,?)) / (end-start)) AS kwh,
+    SUM(on_ms * (MIN(end,?) - MAX(start,?)) / (end-start)) AS on_ms,
+    SUM(MIN(end,?) - MAX(start,?)) AS duration
+    FROM intervals WHERE device_id=? AND end>? AND start<?
+    AND (?=0 OR (source=? AND (source='measured' OR config_revision=?))) GROUP BY source`);
+  for (const d of selected) {
+    const source = energySource(d);
+    const rows = stmt.all(
+      end,
+      start,
+      end,
+      start,
+      end,
+      start,
+      d.id,
+      start,
+      end,
+      Number(Boolean(options.comparable)),
+      source,
+      d.estimate_revision,
+    ) as Row[];
+    let duration = 0;
+    for (const r of rows) {
+      if (r.source === 'estimated') {
+        estimated += r.kwh;
+        onMs += r.on_ms;
+        estimatedCount++;
+      } else {
+        measured += r.kwh;
+        measuredCount++;
+      }
+      duration += r.duration;
     }
+    milliseconds += duration;
+    if (duration / Math.max(1, end - start) >= 0.95) covered++;
+    const recent =
+      d.online &&
+      d.present &&
+      d.last_seen !== null &&
+      now - d.last_seen <= (source === 'estimated' ? MAX_HEATING_GAP : MAX_GAP);
+    if (
+      recent &&
+      (source === 'measured' ||
+        (source === 'estimated' && currentHeatingState(db, d, now) !== 'unknown'))
+    )
+      fresh++;
   }
-  const fresh = meter.filter(
-    (d) => d.online && d.present && d.last_seen !== null && now - d.last_seen <= MAX_GAP,
-  ).length;
-  const coverage = selected.length
-    ? Math.min(1, milliseconds / (Math.max(1, end - start) * selected.length))
-    : 0;
+  const round = (value: number) => Math.round(value * 1e6) / 1e6;
   return {
-    kwh: observed ? Math.round(total * 1e6) / 1e6 : null,
-    coverage,
+    kwh: measuredCount + estimatedCount ? round(measured + estimated) : null,
+    measuredKwh: measuredCount ? round(measured) : null,
+    estimatedKwh: estimatedCount ? round(estimated) : null,
+    heatingHours: estimatedCount ? round(onMs / 3600000) : null,
+    coverage: selected.length
+      ? Math.min(1, milliseconds / (Math.max(1, end - start) * selected.length))
+      : 0,
     monitored: selected.length,
-    metered: meter.length,
+    metered: selected.filter((d) => energySource(d) === 'measured').length,
+    estimated: selected.filter((d) => energySource(d) === 'estimated').length,
     fresh,
-    complete: observed > 0 && coverage >= 0.95 && fresh === selected.length,
+    complete: selected.length > 0 && covered === selected.length && fresh === selected.length,
   };
 }
 
@@ -196,7 +263,14 @@ function history(db: DatabaseSync, devices: Row[], now: number, days: number): H
     const day = previousDate(today, days - i - 1);
     const { start, end } = dayBounds(day);
     const stats = usage(db, devices, start, Math.min(now, end), now);
-    return { day, kwh: stats.kwh, coverage: stats.coverage };
+    return {
+      day,
+      kwh: stats.kwh,
+      measuredKwh: stats.measuredKwh,
+      estimatedKwh: stats.estimatedKwh,
+      heatingHours: stats.heatingHours,
+      coverage: stats.coverage,
+    };
   });
 }
 
@@ -272,6 +346,8 @@ function deviceView(db: DatabaseSync, d: Row, now: number): DeviceView {
     counterKwh: d.counter_kwh,
     temperature: d.temperature,
     powerW: d.power_w,
+    energySource: energySource(d),
+    heatingState: energySource(d) === 'estimated' ? currentHeatingState(db, d, now) : 'unknown',
     stats: usage(db, [{ ...d, included: 1 }], dayBounds(localDate(now)).start, now, now),
   };
 }
@@ -325,6 +401,7 @@ export function getDevice(
     ? {
         ...deviceView(db, d, now),
         homeName: d.home_name,
+        estimation: estimationView(db, d, now),
         history: history(db, [{ ...d, included: 1 }], now, days),
       }
     : null;

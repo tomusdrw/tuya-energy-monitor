@@ -14,6 +14,7 @@ import { accounts, getOverview, getHome, getDevice, notifications, TIMEZONE } fr
 import { emailConfigured, type Config } from './config.js';
 import { callTuya, sessionSchema, type TuyaCall, type TuyaSession } from './tuya.js';
 import { Collector } from './collector.js';
+import { configureEstimation } from './estimation.js';
 import { evaluateNotifications, deliverPending } from './notifications.js';
 
 interface Dependencies {
@@ -196,6 +197,11 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
       .prepare('UPDATE devices SET included=? WHERE id=?')
       .run(Number(included), request.params.id);
     if (!result.changes) return reply.code(404).send({ error: 'Nie znaleziono urządzenia.' });
+    return { ok: true };
+  });
+  app.put<{ Params: { id: string } }>('/api/devices/:id/estimation', async (request, reply) => {
+    if (!configureEstimation(db, request.params.id, request.body, Date.now()))
+      return reply.code(404).send({ error: 'Nie znaleziono urządzenia.' });
     return { ok: true };
   });
   app.get('/api/accounts', async () => accounts(db));

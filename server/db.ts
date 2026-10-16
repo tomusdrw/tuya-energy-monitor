@@ -2,6 +2,12 @@ import { DatabaseSync } from 'node:sqlite';
 
 export function openDatabase(path: string): DatabaseSync {
   const db = new DatabaseSync(path);
+  const version = (db.prepare('PRAGMA user_version').get() as { user_version: number })
+    .user_version;
+  if (version > 2) {
+    db.close();
+    throw new Error('Unsupported database version');
+  }
   db.exec(`
     PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
     CREATE TABLE IF NOT EXISTS accounts (
@@ -43,8 +49,30 @@ export function openDatabase(path: string): DatabaseSync {
       payload TEXT
     );
     CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-    PRAGMA user_version=1;
   `);
+  if (version < 2)
+    transaction(db, () => {
+      db.exec(`
+      ALTER TABLE devices ADD COLUMN estimate_enabled INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE devices ADD COLUMN rated_power_kw REAL;
+      ALTER TABLE devices ADD COLUMN heating_code TEXT;
+      ALTER TABLE devices ADD COLUMN heating_on_values TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE devices ADD COLUMN heating_off_values TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE devices ADD COLUMN estimate_revision INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE devices ADD COLUMN status_fields TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE devices ADD COLUMN status_updated_at INTEGER;
+      ALTER TABLE intervals ADD COLUMN source TEXT NOT NULL DEFAULT 'measured';
+      ALTER TABLE intervals ADD COLUMN on_ms INTEGER;
+      ALTER TABLE intervals ADD COLUMN config_revision INTEGER NOT NULL DEFAULT 0;
+      CREATE TABLE heating_observations (
+        device_id TEXT NOT NULL REFERENCES devices(id), at INTEGER NOT NULL,
+        heating INTEGER, raw_value TEXT, code TEXT, online INTEGER NOT NULL,
+        source TEXT NOT NULL, config_revision INTEGER NOT NULL, rated_power_kw REAL,
+        PRIMARY KEY(device_id, at)
+      );
+      PRAGMA user_version=2;
+    `);
+    });
   return db;
 }
 
