@@ -1,11 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 
-export async function api<T>(url: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(`/api${url}`, { method, signal, credentials: 'same-origin',
+export async function api<T>(
+  url: string,
+  method = 'GET',
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  const response = await fetch(`/api${url}`, {
+    method,
+    signal,
+    credentials: 'same-origin',
     headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body) });
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
   const data = await response.json().catch(() => ({}));
-  if (response.status === 401 && url !== '/auth/login') window.dispatchEvent(new Event('session-expired'));
+  if (response.status === 401 && url !== '/auth/login')
+    window.dispatchEvent(new Event('session-expired'));
   if (!response.ok) throw new Error(data.error ?? 'Nie udało się połączyć z aplikacją.');
   return data as T;
 }
@@ -14,14 +24,18 @@ export function useApi<T>(url: string) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState('');
   const [version, setVersion] = useState(0);
-  const refresh = useCallback(() => setVersion(v => v + 1), []);
-  useEffect(() => { setData(null); }, [url]);
+  const refresh = useCallback(() => setVersion((v) => v + 1), []);
+  useEffect(() => {
+    setData(null);
+  }, [url]);
   useEffect(() => {
     const controller = new AbortController();
     setError('');
-    api<T>(url, 'GET', undefined, controller.signal).then(setData).catch(e => {
-      if (!controller.signal.aborted) setError(e.message);
-    });
+    api<T>(url, 'GET', undefined, controller.signal)
+      .then(setData)
+      .catch((e) => {
+        if (!controller.signal.aborted) setError(e.message);
+      });
     return () => controller.abort();
   }, [url, version]);
   useEffect(() => {

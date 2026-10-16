@@ -11,6 +11,7 @@
     "dev:ui": "vite --host 0.0.0.0",
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "format": "prettier --write src server shared scripts tests *.json *.ts *.html *.yaml .github/workflows/*.yml README.md",
     "build": "npm run typecheck && vite build && tsc -p tsconfig.server.json",
     "start": "node --env-file-if-exists=.env dist/server/main.js",
     "import-session": "node --env-file-if-exists=.env --import tsx scripts/import-session.ts"
@@ -33,6 +34,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "prettier": "^3.9.10",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.4"

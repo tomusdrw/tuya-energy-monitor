@@ -6,13 +6,39 @@ import { encrypt, decrypt } from '../server/crypto.js';
 
 function fixture() {
   const db = openDatabase(':memory:');
-  db.prepare('INSERT INTO accounts(id,label,secret) VALUES(?,?,?)').run('a', 'Account', 'encrypted');
+  db.prepare('INSERT INTO accounts(id,label,secret) VALUES(?,?,?)').run(
+    'a',
+    'Account',
+    'encrypted',
+  );
   const start = Date.parse('2026-10-16T10:00:00Z');
-  const sample = (at: number, value: number | null, online = true) => ingestSnapshot(db, 'a', {
-    homes: [{ id: 'h', name: 'Apartment', devices: [{ id: 'd', name: 'Heater', category: 'wk', online,
-      energyCode: value === null ? null : 'total_forward_energy', counterKwh: value,
-      energyKind: value === null ? 'unsupported' : 'cumulative', temperature: null, powerW: null }] }],
-  }, at);
+  const sample = (at: number, value: number | null, online = true) =>
+    ingestSnapshot(
+      db,
+      'a',
+      {
+        homes: [
+          {
+            id: 'h',
+            name: 'Apartment',
+            devices: [
+              {
+                id: 'd',
+                name: 'Heater',
+                category: 'wk',
+                online,
+                energyCode: value === null ? null : 'total_forward_energy',
+                counterKwh: value,
+                energyKind: value === null ? 'unsupported' : 'cumulative',
+                temperature: null,
+                powerW: null,
+              },
+            ],
+          },
+        ],
+      },
+      at,
+    );
   return { db, start, sample, today: (at: number) => getOverview(db, at, 7).homes[0] };
 }
 
@@ -78,7 +104,12 @@ test('failed/missing snapshot devices retain an explicit gap, including previous
   const f = fixture();
   f.sample(f.start, 10);
   f.sample(f.start + 300000, 11);
-  ingestSnapshot(f.db, 'a', { homes: [{ id: 'h', name: 'Apartment', devices: [] }] }, f.start + 600000);
+  ingestSnapshot(
+    f.db,
+    'a',
+    { homes: [{ id: 'h', name: 'Apartment', devices: [] }] },
+    f.start + 600000,
+  );
   const overview = getOverview(f.db, f.start + 600000, 7);
   assert.equal(overview.homes[0].stats.monitored, 1);
   assert.equal(overview.homes[0].stats.fresh, 0);
