@@ -1,0 +1,25 @@
+services:
+  monitor:
+    image: ${IMAGE:-ghcr.io/tomusdrw/tuya-energy-monitor:latest}
+    build: .
+    restart: unless-stopped
+    init: true
+    ports:
+      - '${BIND_IP:-127.0.0.1}:${HTTP_PORT:-3000}:3000'
+    environment:
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set a password of at least 12 characters}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Generate a 64-character hex key}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      EMAIL_TO: ${EMAIL_TO:-}
+    volumes:
+      - monitor-data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 4m
+
+volumes:
+  monitor-data:

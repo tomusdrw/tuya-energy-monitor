@@ -1,0 +1,3 @@
+tuya-device-sharing-sdk==0.2.15
+# The SDK imports AESGCM but omits cryptography from its package dependencies.
+cryptography==50.0.2
