@@ -1,41 +1,99 @@
 import { useState, type FormEvent } from 'react';
-import { Flame, Save } from 'lucide-react';
-import type { DeviceDetail, StatusValue } from '../shared/types';
+import { Flame, RefreshCw, Save } from 'lucide-react';
+import type { DeviceDetail, EstimationView, StatusValue } from '../shared/types';
+import { statusChoices, suggestHeatingMapping, type HeatingMapping } from '../shared/estimation';
 import { api } from './api';
 import { Badge, Notice, SectionTitle } from './components';
 import { useI18n } from './i18n';
 import { messages } from './locales/estimation';
 
 const stateLabel = { on: 'Heating active', off: 'Idle', unknown: 'Heating state unknown' };
-function parseValues(text: string): StatusValue[] {
-  let values: unknown;
-  try {
-    values = JSON.parse(text);
-  } catch {
-    throw new Error('Enter a list of values, e.g. ["heating"] or [true].');
-  }
-  if (
-    !Array.isArray(values) ||
-    !values.every((v) => ['string', 'number', 'boolean'].includes(typeof v))
-  )
-    throw new Error('The list may contain text, numbers, or true / false.');
-  return values as StatusValue[];
-}
+const fieldLabels: Record<string, string> = {
+  work_state: 'Heating activity',
+  heating_state: 'Heating activity',
+  heat_state: 'Heating activity',
+  relay_state: 'Heating relay',
+  switch: 'Thermostat power',
+};
 
 export function EstimationForm({ device, onSaved }: { device: DeviceDetail; onSaved: () => void }) {
   const { t, number, date } = useI18n(messages);
-  const e = device.estimation;
+  const [probed, setProbed] = useState<EstimationView | null>(null);
+  const e =
+    probed && (probed.statusUpdatedAt ?? 0) > (device.estimation.statusUpdatedAt ?? 0)
+      ? probed
+      : device.estimation;
   const [enabled, setEnabled] = useState(e.enabled);
   const defaultPower = device.category === 'wk' ? 1.25 : '';
   const [power, setPower] = useState(String(e.ratedPowerKw ?? defaultPower));
-  const [code, setCode] = useState(e.heatingCode ?? '');
-  const [on, setOn] = useState(JSON.stringify(e.onValues));
-  const [off, setOff] = useState(JSON.stringify(e.offValues));
+  // An untouched form follows discovery; user edits remain stable across refreshes.
+  const [editedMapping, setMapping] = useState<HeatingMapping | null>(null);
+  const mapping = editedMapping ??
+    (e.heatingCode ? e : e.suggestion) ?? {
+      heatingCode: null,
+      onValues: [],
+      offValues: [],
+    };
+  const code = mapping.heatingCode ?? '';
+  const selectedField = e.statusFields.find((field) => field.code === code);
+  const choices = [
+    ...new Set([
+      ...(selectedField ? statusChoices(selectedField) : []),
+      ...mapping.onValues,
+      ...mapping.offValues,
+    ]),
+  ];
+  const completeMapping = Boolean(code && mapping.onValues.length && mapping.offValues.length);
+  const [probing, setProbing] = useState(false),
+    [probeError, setProbeError] = useState(''),
+    [probeDone, setProbeDone] = useState(false);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [saved, setSaved] = useState(false);
+  const fieldLabel = (value: string) =>
+    fieldLabels[value] ? `${t(fieldLabels[value])} (${value})` : value;
+  function chooseField(value: string) {
+    const field = e.statusFields.find((candidate) => candidate.code === value);
+    setMapping(
+      (field && suggestHeatingMapping(field)) ?? {
+        heatingCode: value || null,
+        onValues: [],
+        offValues: [],
+      },
+    );
+    setSaved(false);
+  }
+  function assign(value: StatusValue, state: string) {
+    setMapping({
+      heatingCode: code,
+      onValues: [
+        ...mapping.onValues.filter((v) => v !== value),
+        ...(state === 'on' ? [value] : []),
+      ],
+      offValues: [
+        ...mapping.offValues.filter((v) => v !== value),
+        ...(state === 'off' ? [value] : []),
+      ],
+    });
+    setSaved(false);
+  }
+  async function probe() {
+    setProbing(true);
+    setProbeError('');
+    setProbeDone(false);
+    try {
+      setProbed(await api<EstimationView>(`/devices/${device.id}/probe`, 'POST', {}));
+      setProbeDone(true);
+      onSaved();
+    } catch (err) {
+      setProbeError((err as Error).message);
+    } finally {
+      setProbing(false);
+    }
+  }
   async function save(event: FormEvent) {
     event.preventDefault();
+    setMapping((current) => current ?? mapping);
     setBusy(true);
     setError('');
     setSaved(false);
@@ -44,8 +102,8 @@ export function EstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
         enabled,
         ratedPowerKw: power === '' ? null : Number(power),
         heatingCode: code.trim() || null,
-        onValues: parseValues(on),
-        offValues: parseValues(off),
+        onValues: mapping.onValues,
+        offValues: mapping.offValues,
       });
       setSaved(true);
       onSaved();
@@ -101,113 +159,174 @@ export function EstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
           )}
         </Notice>
       ) : null}
+      <div className="discovery-toolbar">
+        <div aria-live="polite">
+          <strong>{t('Fields detected from the device')}</strong>
+          <p className="field-help">
+            {probing
+              ? t('Reading device fields…')
+              : probeDone
+                ? t('Fields refreshed. Your selections have been kept.')
+                : t('Choose from available fields and states. No field names or JSON to type.')}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="button secondary compact"
+          disabled={probing || busy}
+          onClick={() => void probe()}
+        >
+          <RefreshCw size={16} />
+          {probing ? t('Detecting…') : t('Detect again')}
+        </button>
+      </div>
+      {probeError && <Notice tone="error">{t(probeError)}</Notice>}
+      {!e.suggestion && !e.heatingCode && (
+        <Notice tone="warning">
+          {t('No recognized heating signal was found.')}{' '}
+          {t(
+            'If a field reports actual heating, select it and assign its states below. Otherwise this connection cannot provide a runtime estimate.',
+          )}
+        </Notice>
+      )}
       <p className="field-help">
         {t(
           'Turning the thermostat on (e.g. switch) does not confirm that the heater is running. Choose a field that indicates active heating and enter the power of the circuit controlled by the thermostat.',
         )}
       </p>
-      <form onSubmit={save} onChange={() => setSaved(false)}>
+      <form
+        onSubmit={save}
+        onChange={() => {
+          setSaved(false);
+          setMapping((current) => current ?? mapping);
+        }}
+      >
         {error && <Notice tone="error">{t(error)}</Notice>}
-        <label className="check-label">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(event) => setEnabled(event.target.checked)}
-          />
-          {t('Enable estimation for this device')}
-        </label>
-        <div className="form-two estimation-fields">
-          <label>
-            {t('Heating power (kW)')}
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0.001"
-              max="1000"
-              step="any"
-              placeholder={t('e.g. 1.2')}
-              required={enabled}
-              value={power}
-              onChange={(event) => setPower(event.target.value)}
-            />
-          </label>
-          <label>
-            {t('Active heating field')}
-            <input
-              list={`fields-${device.id}`}
-              value={code}
-              placeholder={t('e.g. work_state')}
-              maxLength={100}
-              required={enabled}
-              onChange={(event) => setCode(event.target.value)}
-            />
-            <datalist id={`fields-${device.id}`}>
-              {e.statusFields.map((field) => (
-                <option key={field.code} value={field.code}>
-                  {JSON.stringify(field.value)}
-                </option>
+        <fieldset disabled={busy}>
+          <div className="form-two estimation-fields">
+            <label>
+              {t('Heating power (kW)')}
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0.001"
+                max="1000"
+                step="any"
+                placeholder={t('e.g. 1.2')}
+                required={enabled}
+                value={power}
+                onChange={(event) => setPower(event.target.value)}
+              />
+            </label>
+            <label>
+              {t('Active heating field')}
+              <select
+                name="heatingCode"
+                value={code}
+                required={enabled}
+                onChange={(event) => chooseField(event.target.value)}
+              >
+                <option value="">{t('Select a detected field')}</option>
+                {code && !selectedField && (
+                  <option value={code}>{t('Selected field: {code}', { code })}</option>
+                )}
+                {e.statusFields.map((field) => (
+                  <option key={field.code} value={field.code}>
+                    {suggestHeatingMapping(field) ? `${t('Suggested')} · ` : ''}
+                    {fieldLabel(field.code)} — {JSON.stringify(field.value)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {device.category === 'wk' && (
+            <p className="field-help">
+              {t(
+                'The default of {power} kW is an assumed power rating. You can change it to the total heating power controlled by this thermostat.',
+                { power: number(1.25) },
+              )}
+            </p>
+          )}
+          {e.suggestion && code !== e.suggestion.heatingCode && (
+            <button
+              type="button"
+              className="button secondary compact"
+              onClick={() => {
+                setMapping(e.suggestion!);
+                setSaved(false);
+              }}
+            >
+              {t('Use detected field: {code}', { code: e.suggestion.heatingCode ?? '' })}
+            </button>
+          )}
+          {code && !selectedField && (
+            <Notice tone="warning">
+              {t('The selected field is absent from the latest reading. Its assignments are kept.')}
+            </Notice>
+          )}
+          {selectedField && (
+            <p className="field-help">
+              {t('Latest state: {value}', { value: JSON.stringify(selectedField.value) })}
+            </p>
+          )}
+          {choices.length > 0 && (
+            <fieldset className="state-choices">
+              <legend>{t('What does each state mean?')}</legend>
+              {choices.map((value, index) => (
+                <label className="state-choice" key={JSON.stringify(value)}>
+                  <span>
+                    <code>{JSON.stringify(value)}</code>
+                    {selectedField?.value === value && <Badge tone="muted">{t('Current')}</Badge>}
+                  </span>
+                  <select
+                    name={`state-${index}`}
+                    aria-label={t('Meaning of {value}', { value: JSON.stringify(value) })}
+                    value={
+                      mapping.onValues.includes(value)
+                        ? 'on'
+                        : mapping.offValues.includes(value)
+                          ? 'off'
+                          : 'unknown'
+                    }
+                    onChange={(event) => assign(value, event.target.value)}
+                  >
+                    <option value="unknown">{t('Unknown / ignore')}</option>
+                    <option value="on">{t('Heating active')}</option>
+                    <option value="off">{t('Idle')}</option>
+                  </select>
+                </label>
               ))}
-            </datalist>
-          </label>
-        </div>
-        {device.category === 'wk' && (
+            </fieldset>
+          )}
           <p className="field-help">
             {t(
-              'The default of {power} kW is an assumed power rating. You can change it to the total heating power controlled by this thermostat.',
-              { power: number(1.25) },
+              'Assign at least one heating state and one idle state. Unassigned states remain unknown. If a state is missing, detect again after the device reports it.',
             )}
           </p>
-        )}
-        {e.suggestion && (
-          <button
-            type="button"
-            className="button secondary compact"
-            onClick={() => {
-              setCode(e.suggestion!.heatingCode!);
-              setOn(JSON.stringify(e.suggestion!.onValues));
-              setOff(JSON.stringify(e.suggestion!.offValues));
-              setSaved(false);
-            }}
-          >
-            {t('Use detected field: {code}', { code: e.suggestion.heatingCode ?? '' })}
-          </button>
-        )}
-        <div className="form-two estimation-fields">
-          <label>
-            {t('Values while heating')}
+          <label className="check-label">
             <input
-              value={on}
-              maxLength={4000}
-              onChange={(event) => setOn(event.target.value)}
-              spellCheck={false}
+              type="checkbox"
+              disabled={!enabled && (!completeMapping || !selectedField)}
+              checked={enabled}
+              onChange={(event) => setEnabled(event.target.checked)}
             />
+            {t('Enable estimation for this device')}
           </label>
-          <label>
-            {t('Values while idle')}
-            <input
-              value={off}
-              maxLength={4000}
-              onChange={(event) => setOff(event.target.value)}
-              spellCheck={false}
-            />
-          </label>
-        </div>
-        <p className="field-help">
-          {t(
-            'Value lists: ["heating"] and ["standby", "idle"], or [true] and [false]. Put text in quotes. All other values mean missing data.',
-          )}
-        </p>
-        <div className="form-footer">
-          <span className="saved-message" role="status">
-            {saved
-              ? t('Estimation configuration saved.')
-              : t('Changes apply to future readings. History remains unchanged.')}
-          </span>
-          <button className="button primary" disabled={busy}>
-            <Save size={16} />
-            {busy ? t('Saving…') : t('Save estimation')}
-          </button>
-        </div>
+          <div className="form-footer">
+            <span className="saved-message" role="status">
+              {saved
+                ? t('Estimation configuration saved.')
+                : t('Changes apply to future readings. History remains unchanged.')}
+            </span>
+            <button
+              className="button primary"
+              disabled={busy || probing || (enabled && !completeMapping)}
+            >
+              <Save size={16} />
+              {busy ? t('Saving…') : t('Save estimation')}
+            </button>
+          </div>
+        </fieldset>
       </form>
       <details className="estimation-details">
         <summary>{t('Available fields and latest states')}</summary>

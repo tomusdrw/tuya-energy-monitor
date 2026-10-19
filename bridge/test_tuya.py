@@ -53,6 +53,27 @@ if __name__ == '__main__':
     unittest.main()
 
 class StatusTests(unittest.TestCase):
+    def test_missing_enum_range_does_not_erase_previously_observed_choices(self):
+        from tuya import status_fields
+        for meta in ('{}', '{"range":[]}'):
+            fields = status_fields({'status': [{'code': 'work_state', 'value': 'idle'}]}, {
+                'status': [{'code': 'work_state', 'type': 'Enum', 'values': meta}],
+            })
+            self.assertEqual(fields, [{'code': 'work_state', 'value': 'idle'}])
+
+    def test_discovery_uses_function_metadata_when_status_definition_is_missing(self):
+        from tuya import status_fields
+        fields = status_fields({'status': [
+            {'code': 'work_state', 'value': 'heating'},
+            {'code': 'relay_state', 'value': False},
+        ]}, {'functions': [
+            {'code': 'work_state', 'type': 'Enum', 'values': '{"range":["heating","idle"]}'},
+        ]})
+        self.assertEqual(fields, [
+            {'code': 'work_state', 'value': 'heating', 'values': ['heating', 'idle']},
+            {'code': 'relay_state', 'value': False, 'values': [True, False]},
+        ])
+
     def test_status_fields_preserve_typed_values_and_enum_choices_without_scaling_relay(self):
         device = {'id': 'd', 'online': True, 'status': [
             {'code': 'work_state', 'value': 'heating'}, {'code': 'relay_state', 'value': True},

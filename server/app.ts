@@ -221,6 +221,43 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
       return reply.code(404).send({ error: 'Device not found.' });
     return { ok: true };
   });
+  app.post<{ Params: { id: string } }>(
+    '/api/devices/:id/probe',
+    { config: { rateLimit: { max: 2, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const started = Date.now();
+      if (!getDevice(db, request.params.id, started))
+        return reply.code(404).send({ error: 'Device not found.' });
+      // Inventory already fetches specifications. Reuse its queue and token owner.
+      await collector.sync();
+      const accountQuery = db.prepare(`SELECT a.last_sync,a.error FROM accounts a
+        JOIN homes h ON h.account_id=a.id JOIN devices d ON d.home_id=h.id WHERE d.id=?`);
+      const readAccount = () =>
+        accountQuery.get(request.params.id) as
+          { last_sync: number | null; error: string | null } | undefined;
+      let account = readAccount();
+      // A running full inventory may have read this account before the click.
+      // Queue one fresh pass after it finishes, instead of rejecting a healthy read.
+      if (account && !account.error && (account.last_sync ?? 0) < started) {
+        await collector.sync();
+        account = readAccount();
+      }
+      const device = getDevice(db, request.params.id, Date.now());
+      // A failed poll also records an unknown state with a fresh timestamp.
+      // Only a successful inventory refresh establishes discovery success.
+      if (
+        !device?.present ||
+        !account ||
+        account.error ||
+        (account.last_sync ?? 0) < started ||
+        (device.estimation.statusUpdatedAt ?? 0) < started
+      )
+        return reply
+          .code(503)
+          .send({ error: 'Could not refresh device fields. Try again after synchronization.' });
+      return device.estimation;
+    },
+  );
   app.get('/api/accounts', async () => accounts(db));
   app.get('/api/notifications', async () => notifications(db));
   app.get('/api/settings', async () => ({

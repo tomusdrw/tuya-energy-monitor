@@ -13,7 +13,9 @@ CUMULATIVE_CODES = {'total_forward_energy', 'forward_energy_total', 'total_energ
 
 def status_fields(device, specification):
     """Raw scalars only: never scale relay identifiers or expose arbitrary payloads."""
-    definitions = {field['code']: field for field in specification.get('status', [])}
+    # Some devices describe an exposed status only in the functions list.
+    definitions = {field['code']: field for field in
+                   specification.get('functions', []) + specification.get('status', [])}
     result = []
     def safe(value):
         return (isinstance(value, bool) or
@@ -29,7 +31,7 @@ def status_fields(device, specification):
         if kind and kind not in ('boolean', 'bool', 'enum', 'integer', 'value'):
             continue
         normalized = {'code': code, 'value': value}
-        if kind in ('boolean', 'bool'):
+        if kind in ('boolean', 'bool') or not kind and isinstance(value, bool):
             normalized['values'] = [True, False]
         if kind == 'enum':
             try:
@@ -37,7 +39,7 @@ def status_fields(device, specification):
                 if isinstance(meta, str):
                     meta = json.loads(meta)
                 choices = meta.get('range', [])
-                if isinstance(choices, list) and len(choices) <= 100 and all(safe(v) for v in choices):
+                if isinstance(choices, list) and 0 < len(choices) <= 100 and all(safe(v) for v in choices):
                     normalized['values'] = choices
             except (ValueError, TypeError, AttributeError):
                 pass

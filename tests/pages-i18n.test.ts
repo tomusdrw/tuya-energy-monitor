@@ -82,7 +82,20 @@ test('estimation uses the selected language and number format while preserving r
       assert.ok(html.includes('work_state'));
       assert.ok(html.includes('&quot;heating&quot;'));
       assert.ok(!html.includes('checked=""'));
+      assert.match(html, /<select[^>]*name="heatingCode"/);
+      assert.match(html, /<select[^>]*name="state-0"/);
+      assert.match(html, /<select[^>]*name="state-1"/);
+      assert.ok(html.includes(language === 'en' ? 'Detect again' : 'Wykryj ponownie'));
     }
+    device.estimation.heatingCode = 'custom_relay';
+    device.estimation.onValues = [1];
+    device.estimation.offValues = ['1', false];
+    const saved = renderToStaticMarkup(
+      createElement(EstimationForm, { device, onSaved: () => {} }),
+    );
+    assert.match(saved, /<option value="custom_relay" selected=""/);
+    assert.ok(saved.includes('The selected field is absent from the latest reading.'));
+    assert.match(saved, /<select[^>]*name="state-2"/);
   } finally {
     db.close();
   }
