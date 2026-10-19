@@ -4,10 +4,6 @@ export const messages: Messages = {
   'Heating active': 'Grzanie aktywne',
   Idle: 'Postój',
   'Heating state unknown': 'Stan grzania nieznany',
-  'Enter a list of values, e.g. ["heating"] or [true].':
-    'Wpisz listę wartości, np. ["heating"] albo [true].',
-  'The list may contain text, numbers, or true / false.':
-    'Lista może zawierać tekst, liczby lub true / false.',
   'Heating runtime estimation': 'Estymacja z czasu grzania',
   'For electric heating with a constant power rating': 'Dla ogrzewania elektrycznego o stałej mocy',
   'Estimation enabled': 'Estymacja włączona',
@@ -26,14 +22,34 @@ export const messages: Messages = {
   'Heating power (kW)': 'Moc ogrzewania (kW)',
   'e.g. 1.2': 'np. 1,2',
   'Active heating field': 'Pole aktywnego grzania',
-  'e.g. work_state': 'np. work_state',
   'The default of {power} kW is an assumed power rating. You can change it to the total heating power controlled by this thermostat.':
     'Domyślnie {power} kW — moc założona. Możesz ją zmienić na łączną moc ogrzewania sterowanego przez ten termostat.',
   'Use detected field: {code}': 'Użyj wykrytego pola: {code}',
-  'Values while heating': 'Wartości podczas grzania',
-  'Values while idle': 'Wartości podczas postoju',
-  'Value lists: ["heating"] and ["standby", "idle"], or [true] and [false]. Put text in quotes. All other values mean missing data.':
-    'Listy wartości: ["heating"] i ["standby", "idle"] albo [true] i [false]. Tekst zapisz w cudzysłowie. Pozostałe wartości oznaczają brak danych.',
+  'Heating activity': 'Stan grzania',
+  'Heating relay': 'Przekaźnik grzania',
+  'Thermostat power': 'Włączenie termostatu',
+  'Fields detected from the device': 'Pola wykryte w urządzeniu',
+  'Reading device fields…': 'Odczytywanie pól urządzenia…',
+  'Fields refreshed. Your selections have been kept.': 'Pola odświeżone. Zachowano Twój wybór.',
+  'Choose from available fields and states. No field names or JSON to type.':
+    'Wybierz dostępne pole i jego stany. Bez wpisywania nazw pól ani JSON-a.',
+  'Detecting…': 'Wykrywanie…',
+  'Detect again': 'Wykryj ponownie',
+  'No recognized heating signal was found.': 'Nie wykryto rozpoznanego sygnału grzania.',
+  'If a field reports actual heating, select it and assign its states below. Otherwise this connection cannot provide a runtime estimate.':
+    'Jeśli któreś pole pokazuje faktyczne grzanie, wybierz je i przypisz jego stany poniżej. W przeciwnym razie to połączenie nie pozwala szacować zużycia z czasu grzania.',
+  'Select a detected field': 'Wybierz wykryte pole',
+  'Selected field: {code}': 'Wybrane pole: {code}',
+  Suggested: 'Sugerowane',
+  'The selected field is absent from the latest reading. Its assignments are kept.':
+    'Wybranego pola nie ma w ostatnim odczycie. Zachowano przypisania jego stanów.',
+  'Latest state: {value}': 'Ostatni stan: {value}',
+  'What does each state mean?': 'Co oznaczają poszczególne stany?',
+  Current: 'Aktualny',
+  'Meaning of {value}': 'Znaczenie stanu {value}',
+  'Unknown / ignore': 'Nieznany / pomiń',
+  'Assign at least one heating state and one idle state. Unassigned states remain unknown. If a state is missing, detect again after the device reports it.':
+    'Przypisz co najmniej jeden stan grzania i jeden stan postoju. Nieprzypisane stany pozostają nieznane. Jeśli brakuje stanu, ponów wykrywanie, gdy urządzenie go zgłosi.',
   'Estimation configuration saved.': 'Konfiguracja estymacji zapisana.',
   'Changes apply to future readings. History remains unchanged.':
     'Zmiany dotyczą przyszłych odczytów. Historia pozostaje bez zmian.',

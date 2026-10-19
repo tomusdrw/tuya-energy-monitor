@@ -12,6 +12,8 @@ export const systemMessages: Record<string, string> = {
   'Incorrect password.': 'Nieprawidłowe hasło.',
   'Home not found.': 'Nie znaleziono mieszkania.',
   'Device not found.': 'Nie znaleziono urządzenia.',
+  'Could not refresh device fields. Try again after synchronization.':
+    'Nie udało się odświeżyć pól urządzenia. Spróbuj ponownie po synchronizacji.',
   'Complete the connection in progress or wait 5 minutes.':
     'Dokończ rozpoczęte połączenie lub poczekaj 5 minut.',
   'Account not found.': 'Nie znaleziono konta.',

@@ -4,6 +4,7 @@ import { createApp } from '../server/app.js';
 import { openDatabase } from '../server/db.js';
 import { encrypt } from '../server/crypto.js';
 import { ingestSnapshot } from '../server/energy.js';
+import { configureEstimation } from '../server/estimation.js';
 import type { Config } from '../server/config.js';
 
 const config: Config = {
@@ -286,6 +287,234 @@ test('estimation configuration is private, validates mappings and power, and nev
       404,
     );
   } finally {
+    await app.close();
+  }
+});
+
+for (const outcome of ['success', 'failure', 'omitted', 'enabled-failure'] as const) {
+  test(`field rediscovery awaits a fresh inventory and reports ${outcome} without changing configuration`, async () => {
+    const db = openDatabase(':memory:');
+    const session = {
+      user_code: 'user',
+      terminal_id: 'terminal',
+      endpoint: 'https://apigw.tuyaeu.com',
+      token_info: {
+        t: 0,
+        uid: 'uid',
+        expire_time: 9999999999,
+        access_token: 'old',
+        refresh_token: 'refresh',
+      },
+    };
+    db.prepare('INSERT INTO accounts(id,label,secret) VALUES(?,?,?)').run(
+      'a',
+      'A',
+      encrypt(session, config.encryptionKey),
+    );
+    const device = {
+      id: 'remote',
+      name: 'Heater',
+      category: 'wk',
+      online: true,
+      energyKind: 'unsupported',
+      energyCode: null,
+      counterKwh: null,
+      temperature: null,
+      powerW: null,
+      statusFields: [{ code: 'work_state', value: 'heating', values: ['heating', 'idle'] }],
+    };
+    ingestSnapshot(
+      db,
+      'a',
+      { homes: [{ id: 'h', name: 'H', devices: [device] }] },
+      Date.now() - 60000,
+    );
+    const id = db.prepare('SELECT id FROM devices').get()!.id;
+    if (outcome === 'enabled-failure')
+      configureEstimation(
+        db,
+        String(id),
+        {
+          enabled: true,
+          ratedPowerKw: 1.25,
+          heatingCode: 'work_state',
+          onValues: ['heating'],
+          offValues: ['idle'],
+        },
+        Date.now() - 1000,
+      );
+    let calls = 0;
+    const app = await createApp(config, {
+      db,
+      background: false,
+      tuya: async (operation, payload) => {
+        calls++;
+        assert.equal(operation, 'read');
+        assert.deepEqual(payload.session, session);
+        return outcome.endsWith('failure')
+          ? { ok: false }
+          : {
+              ok: true,
+              snapshot: {
+                homes: [
+                  {
+                    id: 'h',
+                    name: 'H',
+                    devices:
+                      outcome === 'omitted'
+                        ? []
+                        : [
+                            {
+                              ...device,
+                              statusFields: [
+                                { code: 'relay_state', value: true, values: [true, false] },
+                              ],
+                            },
+                          ],
+                  },
+                ],
+              },
+            };
+      },
+    });
+    try {
+      const url = `/api/devices/${id}/probe`;
+      assert.equal(
+        (await app.inject({ method: 'POST', url, headers: { origin: config.origin } })).statusCode,
+        401,
+      );
+      const login = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        headers: { origin: config.origin },
+        payload: { password: config.password },
+      });
+      const cookie = String(login.headers['set-cookie']).split(';')[0];
+      const headers = { cookie, origin: config.origin };
+      assert.equal(
+        (
+          await app.inject({
+            method: 'POST',
+            url,
+            headers: { cookie, origin: 'https://evil.example' },
+          })
+        ).statusCode,
+        403,
+      );
+      assert.equal(calls, 0);
+      const response = await app.inject({ method: 'POST', url, headers });
+      assert.equal(response.statusCode, outcome === 'success' ? 200 : 503);
+      assert.equal(calls, 1);
+      if (outcome === 'success') {
+        assert.deepEqual(response.json().statusFields, [
+          { code: 'relay_state', value: true, values: [true, false] },
+        ]);
+        assert.equal(response.json().enabled, false);
+        assert.equal(response.json().revision, 0);
+        assert.ok(response.json().statusUpdatedAt >= Date.now() - 1000);
+      }
+      assert.equal(
+        (await app.inject({ method: 'POST', url: '/api/devices/absent/probe', headers }))
+          .statusCode,
+        404,
+      );
+    } finally {
+      await app.close();
+    }
+  });
+}
+
+test('rediscovery queues a fresh read if its account was already read by an in-flight inventory', async (t) => {
+  let now = Date.parse('2026-10-19T12:00:00Z');
+  t.mock.method(Date, 'now', () => now);
+  const db = openDatabase(':memory:');
+  const snapshots = (uid: string) => ({
+    homes: [
+      {
+        id: 'h',
+        name: uid,
+        devices: [
+          {
+            id: 'd',
+            name: 'Heater',
+            category: 'wk',
+            online: true,
+            energyKind: 'unsupported',
+            energyCode: null,
+            counterKwh: null,
+            temperature: null,
+            powerW: null,
+            statusFields: [{ code: 'relay_state', value: true, values: [true, false] }],
+          },
+        ],
+      },
+    ],
+  });
+  for (const uid of ['a', 'b']) {
+    db.prepare('INSERT INTO accounts(id,label,secret) VALUES(?,?,?)').run(
+      uid,
+      uid,
+      encrypt(
+        {
+          user_code: uid,
+          terminal_id: uid,
+          endpoint: 'https://apigw.tuyaeu.com',
+          token_info: {
+            t: 0,
+            uid,
+            expire_time: 9999999999,
+            access_token: 'old',
+            refresh_token: 'refresh',
+          },
+        },
+        config.encryptionKey,
+      ),
+    );
+    ingestSnapshot(db, uid, snapshots(uid), now - 60000);
+  }
+  const id = db
+    .prepare("SELECT d.id FROM devices d JOIN homes h ON h.id=d.home_id WHERE h.account_id='a'")
+    .get()!.id;
+  const blocked = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>();
+  const calls: string[] = [];
+  const app = await createApp(config, {
+    db,
+    background: false,
+    tuya: async (operation, payload: any) => {
+      assert.equal(operation, 'read');
+      const uid = payload.session.token_info.uid;
+      calls.push(uid);
+      if (uid === 'b' && calls.length === 2) {
+        blocked.resolve();
+        await release.promise;
+      }
+      return { ok: true, snapshot: snapshots(uid) };
+    },
+  });
+  try {
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      headers: { origin: config.origin },
+      payload: { password: config.password },
+    });
+    const headers = {
+      origin: config.origin,
+      cookie: String(login.headers['set-cookie']).split(';')[0],
+    };
+    await app.inject({ method: 'POST', url: '/api/sync', headers });
+    await blocked.promise;
+    now += 1000;
+    const response = app.inject({ method: 'POST', url: `/api/devices/${id}/probe`, headers });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    release.resolve();
+    const result = await response;
+    assert.equal(result.statusCode, 200);
+    assert.ok(calls.filter((uid) => uid === 'a').length >= 2);
+    assert.equal(result.json().statusUpdatedAt, now);
+  } finally {
+    release.resolve();
     await app.close();
   }
 });

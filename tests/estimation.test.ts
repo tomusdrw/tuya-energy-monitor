@@ -284,3 +284,67 @@ test('fast states retain known enum choices but never retain a missing relay val
   );
   f.db.close();
 });
+
+test('discovery learns observed choices before estimation is enabled without inventing numeric states', () => {
+  const f = estimationFixture();
+  try {
+    f.snapshot(f.start + minute, null, [
+      { code: 'work_state', value: 'heating' },
+      { code: 'relay_state', value: 1 },
+    ]);
+    assert.equal(getDevice(f.db, f.id, f.start + minute)!.estimation.suggestion, null);
+    f.snapshot(f.start + 2 * minute, null, [
+      { code: 'work_state', value: 'idle' },
+      { code: 'relay_state', value: 1 },
+    ]);
+    const e = getDevice(f.db, f.id, f.start + 2 * minute)!.estimation;
+    assert.deepEqual(e.suggestion, {
+      heatingCode: 'work_state',
+      onValues: ['heating'],
+      offValues: ['idle'],
+    });
+    assert.deepEqual(e.statusFields[1].values, [1]);
+    assert.equal(e.enabled, false);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM intervals').get()!.n, 0);
+  } finally {
+    f.db.close();
+  }
+});
+
+test('boolean relay discovery knows both states but never suggests the thermostat power switch', () => {
+  const f = estimationFixture();
+  try {
+    f.snapshot(f.start + minute, null, [{ code: 'switch', value: true }]);
+    assert.equal(getDevice(f.db, f.id, f.start + minute)!.estimation.suggestion, null);
+    f.snapshot(f.start + 2 * minute, null, [{ code: 'relay_state', value: false }]);
+    assert.deepEqual(getDevice(f.db, f.id, f.start + 2 * minute)!.estimation.suggestion, {
+      heatingCode: 'relay_state',
+      onValues: [true],
+      offValues: [false],
+    });
+  } finally {
+    f.db.close();
+  }
+});
+
+test('empty enum metadata retains observed choices; a new declared range replaces them', () => {
+  const f = estimationFixture();
+  try {
+    f.snapshot(f.start + minute, null, [{ code: 'work_state', value: 'heating', values: [] }]);
+    f.snapshot(f.start + 2 * minute, null, [{ code: 'work_state', value: 'idle', values: [] }]);
+    assert.deepEqual(getDevice(f.db, f.id, f.start + 2 * minute)!.estimation.suggestion, {
+      heatingCode: 'work_state',
+      onValues: ['heating'],
+      offValues: ['idle'],
+    });
+    f.snapshot(f.start + 3 * minute, null, [
+      { code: 'work_state', value: 'heat', values: ['heat', 'off'] },
+    ]);
+    assert.deepEqual(
+      getDevice(f.db, f.id, f.start + 3 * minute)!.estimation.statusFields[0].values,
+      ['heat', 'off'],
+    );
+  } finally {
+    f.db.close();
+  }
+});

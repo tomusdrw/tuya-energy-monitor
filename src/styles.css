@@ -1693,6 +1693,56 @@ nav a.active {
 .estimation-panel form {
   margin-top: 24px;
 }
+.estimation-panel select {
+  width: 100%;
+  min-height: 43px;
+  padding: 10px 12px;
+  border: 1px solid #dce2ec;
+  border-radius: 8px;
+  color: #223148;
+  background: white;
+  font: inherit;
+  font-weight: 400;
+}
+.estimation-panel select:focus-visible {
+  border-color: var(--blue);
+  outline: 2px solid #e3ebff;
+}
+.estimation-fields label select {
+  margin-top: 8px;
+}
+.discovery-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 24px 0 16px;
+}
+.discovery-toolbar strong {
+  font-size: 13px;
+}
+.discovery-toolbar .field-help {
+  margin: 6px 0 0;
+}
+.state-choices {
+  margin: 20px 0;
+}
+.state-choice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.state-choice > span {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  overflow-wrap: anywhere;
+}
 .estimation-details {
   border-top: 1px solid var(--line);
   padding-top: 20px;
@@ -1737,6 +1787,10 @@ nav a.active {
   }
   .estimation-panel .form-footer button {
     justify-content: center;
+  }
+  .state-choice {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
   }
 }
 

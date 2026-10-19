@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { transaction } from './db.js';
 import type { EstimationConfig, EstimationView, StatusField } from '../shared/types.js';
+import { statusChoices, suggestHeatingMapping } from '../shared/estimation.js';
 
 export const MAX_HEATING_GAP = 180000;
 const scalar = z.union([z.boolean(), z.number().finite(), z.string().max(100)]);
@@ -118,7 +119,15 @@ export function recordHeatingState(
     const old = oldFields.find(
       (prior) => prior.code === field.code && typeof prior.value === typeof field.value,
     );
-    return field.values === undefined && old?.values ? { ...field, values: old.values } : field;
+    // Learn choices even before estimation is enabled. Metadata replaces old choices;
+    // fast reads retain observed choices, but never retain an absent current field.
+    return {
+      ...field,
+      values: statusChoices({
+        ...field,
+        values: field.values?.length ? field.values : old ? statusChoices(old) : [],
+      }).slice(-100),
+    };
   });
   db.prepare('UPDATE devices SET status_fields=?,status_updated_at=? WHERE id=?').run(
     JSON.stringify(fields),
@@ -247,18 +256,7 @@ export function estimationView(db: DatabaseSync, d: Row, now: number): Estimatio
     .prepare('SELECT * FROM heating_observations WHERE device_id=? ORDER BY at DESC LIMIT 30')
     .all(d.id) as Row[];
   const last = rows[0];
-  let suggestion: EstimationView['suggestion'] = null;
-  for (const field of fields) {
-    if (!['work_state', 'heating_state', 'heat_state', 'relay_state'].includes(field.code))
-      continue;
-    const values = field.values ?? [field.value];
-    const onValues = values.filter((v) => ['heating', 'heat', true, 1].includes(v));
-    const offValues = values.filter((v) => ['standby', 'idle', 'off', false, 0].includes(v));
-    if (onValues.length && offValues.length) {
-      suggestion = { heatingCode: field.code, onValues, offValues };
-      break;
-    }
-  }
+  const suggestion = fields.map(suggestHeatingMapping).find((mapping) => mapping !== null) ?? null;
   const total = db
     .prepare("SELECT SUM(on_ms) AS ms FROM intervals WHERE device_id=? AND source='estimated'")
     .get(d.id) as Row;

@@ -266,5 +266,7 @@ test('estimation form exposes unknown state and requires a real heating signal w
   assert.ok(html.includes('switch'));
   assert.ok(html.includes('Turning the thermostat on'));
   assert.ok(!html.includes('checked=""'), 'Estimation must not enable itself');
+  assert.ok(html.includes('No recognized heating signal was found.'));
+  assert.match(html, /type="checkbox" disabled=""/);
   db.close();
 });

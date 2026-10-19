@@ -82,18 +82,24 @@ encrypted with AES-256-GCM before storage and never returned to the browser.
 
 In **Apartments → device → Heating runtime estimation**:
 
-1. Expand **Available fields and latest states**. Confirm a field that actually reports
-   the heating relay, such as `work_state`. A general `switch`, selected mode or
-   temperature setpoint is **not** evidence that the heater is drawing power.
+1. Available fields and states are loaded automatically. Recognized heating signals
+   are marked **Suggested** and preselected for new configurations. Use **Detect again**
+   to refresh fields and specifications from Tuya through the existing inventory sync.
+   Confirm a field that actually reports the heating relay, such as `work_state`.
+   A general `switch`, selected mode or temperature setpoint is **not** evidence that
+   the heater is drawing power. If no recognized signal is found, the form says so.
 2. Set the total rated **heating circuit power in kW** (for example 1200 W =
    1.2 kW), not the thermostat's own power or maximum relay rating. Thermostat
    forms (`wk`) prefill **1.25 kW** when no power is saved, an editable assumption
    within the owner's suggested 1–1.5 kW range. Existing configured values are
    preserved. This default does not enable estimation or confirm a relay signal.
-3. Select the field and its exact ON/OFF values. The form accepts JSON arrays:
-   `["heating"]` / `["standby", "idle"]`, `[true]` / `[false]`, or `[1]` / `[0]`.
-   Strings, numbers and booleans are distinct. Confirm any suggested mapping
-   against the actual device. Unsupported values remain unknown.
+3. Select a detected field, then assign each available state to **Heating active**,
+   **Idle**, or **Unknown / ignore**. No field names or JSON need to be typed.
+   Choices come from Tuya's metadata and observed states; booleans offer both values.
+   Strings, numbers and booleans remain distinct. If metadata is incomplete, detect
+   again after the device reports the other state. Confirm suggested assignments
+   against the actual device. Unassigned values remain unknown. Refreshing preserves
+   edits and saved mappings, including saved values absent from the latest reading.
 4. Enable and save. The first new observation establishes a baseline; consecutive
    valid observations produce estimates. Device history includes daily kWh and
    the panel shows today's and lifetime observed heating hours.
