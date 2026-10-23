@@ -852,6 +852,100 @@ nav a.active {
 .menu-backdrop {
   display: none;
 }
+.device-list-row,
+.device-list-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 126px;
+  align-items: center;
+  column-gap: 16px;
+}
+.device-list-row {
+  border-bottom: 1px solid #eef1f6;
+}
+.device-list-row:last-child {
+  border-bottom: 0;
+}
+.device-list-row:hover {
+  background: #fafbfe;
+}
+.monitoring-heading {
+  color: #96a2b5;
+  font-size: 9px;
+  padding-bottom: 12px;
+}
+.monitoring-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #f0f2f6;
+  color: #5c6a80;
+  font-size: 11px;
+}
+.monitoring-toggle[aria-checked='true'] {
+  background: #e9f6f0;
+  color: #167452;
+}
+.monitoring-switch {
+  width: 30px;
+  height: 18px;
+  padding: 3px;
+  border-radius: 12px;
+  background: #8995a7;
+  flex-shrink: 0;
+}
+.monitoring-switch::after {
+  content: '';
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+}
+.monitoring-toggle[aria-checked='true'] .monitoring-switch {
+  background: #167452;
+}
+.monitoring-toggle[aria-checked='true'] .monitoring-switch::after {
+  transform: translateX(12px);
+}
+.device-monitoring-error {
+  grid-column: 1 / -1;
+}
+.device-monitoring-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+}
+.device-ignore-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px;
+  border-radius: 8px;
+  background: transparent;
+  color: #5c6a80;
+  font-size: 11px;
+}
+.device-ignore-button:hover:not(:disabled) {
+  background: #edf1f8;
+}
+.ignored-devices {
+  border-top: 1px solid var(--line);
+  margin-top: 16px;
+  padding-top: 12px;
+}
+.ignored-devices > summary {
+  padding: 12px 0;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #5c6a80;
+}
 .device-row {
   display: grid;
   grid-template-columns:
@@ -859,15 +953,8 @@ nav a.active {
     18px;
   align-items: center;
   gap: 12px;
-  border-bottom: 1px solid #eef1f6;
   padding: 17px 0;
   font-size: 12px;
-}
-.device-row:last-child {
-  border: 0;
-}
-.device-row:not(.table-head):hover {
-  background: #fafbfe;
 }
 .device-row.table-head {
   color: #96a2b5;
@@ -1297,6 +1384,22 @@ nav a.active {
   }
 }
 @media (max-width: 900px) {
+  .device-list-row,
+  .device-list-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .device-list-header .monitoring-heading {
+    display: none;
+  }
+  .monitoring-toggle {
+    min-width: 126px;
+  }
+  .device-monitoring-actions {
+    flex-direction: row;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    padding: 0 0 12px;
+  }
   .sidebar {
     width: 195px;
   }

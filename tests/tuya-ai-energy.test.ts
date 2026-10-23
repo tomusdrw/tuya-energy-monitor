@@ -321,7 +321,7 @@ test('native QR power retains precedence and transitions to and from Tuya.ai nev
   }
 });
 
-test('released native-power v4 database upgrades to v5 preserving power baselines and history', async () => {
+test('released native-power v4 database upgrades preserving power baselines and history', async () => {
   const { DatabaseSync } = await import('node:sqlite');
   const { readFileSync } = await import('node:fs');
   const dir = mkdtempSync(path.join(os.tmpdir(), 'tem-v4-'));
@@ -347,7 +347,7 @@ test('released native-power v4 database upgrades to v5 preserving power baseline
     ).run(id, start - minute, start);
     db.close();
     db = openDatabase(file);
-    assert.equal(db.prepare('PRAGMA user_version').get()!.user_version, 5);
+    assert.equal(db.prepare('PRAGMA user_version').get()!.user_version, 6);
     assert.equal(db.prepare('SELECT secret FROM accounts').get()!.secret, 'encrypted-qr');
     assert.equal(db.prepare('SELECT ai_secret FROM accounts').get()!.ai_secret, null);
     assert.equal(db.prepare('SELECT qr_energy_kind FROM devices').get()!.qr_energy_kind, 'power');
