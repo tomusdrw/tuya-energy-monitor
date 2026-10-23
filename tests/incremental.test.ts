@@ -194,6 +194,8 @@ test('v2 migration preserves data and report deduplication survives database reo
     ])
       f.db.exec(`ALTER TABLE accounts DROP COLUMN ${column}`);
     for (const column of [
+      'temperature_config',
+      'temperature_metadata',
       'qr_energy_kind',
       'qr_energy_code',
       'measurement_provider',

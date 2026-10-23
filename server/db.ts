@@ -4,7 +4,7 @@ export function openDatabase(path: string): DatabaseSync {
   const db = new DatabaseSync(path);
   const version = (db.prepare('PRAGMA user_version').get() as { user_version: number })
     .user_version;
-  if (version > 5) {
+  if (version > 6) {
     db.close();
     throw new Error('Unsupported database version');
   }
@@ -125,6 +125,14 @@ export function openDatabase(path: string): DatabaseSync {
           revision INTEGER NOT NULL, fetched_at INTEGER NOT NULL, meters TEXT NOT NULL
         );
         PRAGMA user_version=5;
+      `);
+    });
+  if (version < 6)
+    transaction(db, () => {
+      db.exec(`
+        ALTER TABLE devices ADD COLUMN temperature_config TEXT;
+        ALTER TABLE devices ADD COLUMN temperature_metadata TEXT NOT NULL DEFAULT '{}';
+        PRAGMA user_version=6;
       `);
     });
   return db;

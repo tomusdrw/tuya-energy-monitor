@@ -1,7 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import { Flame, RefreshCw, Save } from 'lucide-react';
-import type { DeviceDetail, EstimationView, StatusValue } from '../shared/types';
+import type {
+  DeviceDetail,
+  EstimationView,
+  StatusValue,
+  TemperatureMapping,
+} from '../shared/types';
 import { statusChoices, suggestHeatingMapping, type HeatingMapping } from '../shared/estimation';
+import { temperatureHeatingState, temperatureValue } from '../shared/temperature';
 import { api } from './api';
 import { Badge, Notice, SectionTitle } from './components';
 import { useI18n } from './i18n';
@@ -74,6 +80,25 @@ function RuntimeEstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
   const [enabled, setEnabled] = useState(e.enabled);
   const defaultPower = device.category === 'wk' ? 1.25 : '';
   const [power, setPower] = useState(String(e.ratedPowerKw ?? defaultPower));
+  const [editedMethod, setMethod] = useState<'relay' | 'temperature' | null>(null);
+  const method =
+    editedMethod ??
+    (e.temperature || (!e.heatingCode && !e.suggestion && e.temperatureSuggestion)
+      ? 'temperature'
+      : 'relay');
+  const [editedTemperature, setTemperature] = useState<TemperatureMapping | null>(null);
+  const temperature = editedTemperature ?? e.temperature ?? e.temperatureSuggestion;
+  const detectedTemperature = e.temperatureSuggestion;
+  const matchesDetectedTemperature =
+    temperature &&
+    detectedTemperature &&
+    temperature.switchCode === detectedTemperature.switchCode &&
+    (['current', 'target'] as const).every(
+      (role) =>
+        temperature[role].code === detectedTemperature[role].code &&
+        temperature[role].scale === detectedTemperature[role].scale &&
+        temperature[role].unit === detectedTemperature[role].unit,
+    );
   // An untouched form follows discovery; user edits remain stable across refreshes.
   const [editedMapping, setMapping] = useState<HeatingMapping | null>(null);
   const mapping = editedMapping ??
@@ -91,7 +116,13 @@ function RuntimeEstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
       ...mapping.offValues,
     ]),
   ];
-  const completeMapping = Boolean(code && mapping.onValues.length && mapping.offValues.length);
+  const completeMapping =
+    method === 'temperature'
+      ? Boolean(temperature && temperature.current.code !== temperature.target.code)
+      : Boolean(code && mapping.onValues.length && mapping.offValues.length);
+  const currentTemperatureState = temperature
+    ? temperatureHeatingState(e.statusFields, temperature)
+    : null;
   const [probing, setProbing] = useState(false),
     [probeError, setProbeError] = useState(''),
     [probeDone, setProbeDone] = useState(false);
@@ -149,9 +180,10 @@ function RuntimeEstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
       await api(`/devices/${device.id}/estimation`, 'PUT', {
         enabled,
         ratedPowerKw: power === '' ? null : Number(power),
-        heatingCode: code.trim() || null,
-        onValues: mapping.onValues,
-        offValues: mapping.offValues,
+        heatingCode: method === 'relay' ? code.trim() || null : null,
+        onValues: method === 'relay' ? mapping.onValues : [],
+        offValues: method === 'relay' ? mapping.offValues : [],
+        temperature: method === 'temperature' ? temperature : null,
       });
       setSaved(true);
       onSaved();
@@ -174,6 +206,7 @@ function RuntimeEstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
           {t(stateLabel[e.state])}
         </Badge>
         <span>{e.enabled ? t('Estimation enabled') : t('Estimation disabled')}</span>
+        {e.temperature && <Badge tone="muted">{t('Temperature comparison')}</Badge>}
       </div>
       <div className="runtime-grid">
         <div>
@@ -203,7 +236,7 @@ function RuntimeEstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
       ) : e.enabled && e.state === 'unknown' ? (
         <Notice tone="warning">
           {t(
-            'No current, recognized heating signal. This period remains missing data even when the thermostat is online.',
+            'No current, valid heating data. This period remains missing data even when the thermostat is online.',
           )}
         </Notice>
       ) : null}
@@ -229,29 +262,44 @@ function RuntimeEstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
         </button>
       </div>
       {probeError && <Notice tone="error">{t(probeError)}</Notice>}
-      {!e.suggestion && !e.heatingCode && (
+      {method === 'relay' && !e.suggestion && !e.heatingCode && (
         <Notice tone="warning">
           {t('No recognized heating signal was found.')}{' '}
           {t(
-            'If a field reports actual heating, select it and assign its states below. Otherwise this connection cannot provide a runtime estimate.',
+            'Select a field that reports heating, or choose temperature comparison when current and target temperatures are available.',
           )}
         </Notice>
       )}
-      <p className="field-help">
-        {t(
-          'Turning the thermostat on (e.g. switch) does not confirm that the heater is running. Choose a field that indicates active heating and enter the power of the circuit controlled by the thermostat.',
-        )}
-      </p>
+      {method === 'relay' && (
+        <p className="field-help">
+          {t(
+            'Turning the thermostat on (e.g. switch) does not confirm that the heater is running. Choose a field that indicates active heating and enter the power of the circuit controlled by the thermostat.',
+          )}
+        </p>
+      )}
       <form
         onSubmit={save}
         onChange={() => {
           setSaved(false);
           setMapping((current) => current ?? mapping);
+          setMethod((current) => current ?? method);
+          setTemperature((current) => current ?? temperature);
         }}
       >
         {error && <Notice tone="error">{t(error)}</Notice>}
         <fieldset disabled={busy}>
           <div className="form-two estimation-fields">
+            <label>
+              {t('Estimation method')}
+              <select
+                name="estimationMethod"
+                value={method}
+                onChange={(event) => setMethod(event.target.value as 'relay' | 'temperature')}
+              >
+                <option value="relay">{t('Heating signal')}</option>
+                <option value="temperature">{t('Temperature comparison')}</option>
+              </select>
+            </label>
             <label>
               {t('Heating power (kW)')}
               <input
@@ -266,27 +314,94 @@ function RuntimeEstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
                 onChange={(event) => setPower(event.target.value)}
               />
             </label>
-            <label>
-              {t('Active heating field')}
-              <select
-                name="heatingCode"
-                value={code}
-                required={enabled}
-                onChange={(event) => chooseField(event.target.value)}
-              >
-                <option value="">{t('Select a detected field')}</option>
-                {code && !selectedField && (
-                  <option value={code}>{t('Selected field: {code}', { code })}</option>
-                )}
-                {e.statusFields.map((field) => (
-                  <option key={field.code} value={field.code}>
-                    {suggestHeatingMapping(field) ? `${t('Suggested')} · ` : ''}
-                    {fieldLabel(field.code)} — {JSON.stringify(field.value)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {method === 'relay' && (
+              <label>
+                {t('Active heating field')}
+                <select
+                  name="heatingCode"
+                  value={code}
+                  required={enabled}
+                  onChange={(event) => chooseField(event.target.value)}
+                >
+                  <option value="">{t('Select a detected field')}</option>
+                  {code && !selectedField && (
+                    <option value={code}>{t('Selected field: {code}', { code })}</option>
+                  )}
+                  {e.statusFields.map((field) => (
+                    <option key={field.code} value={field.code}>
+                      {suggestHeatingMapping(field) ? `${t('Suggested')} · ` : ''}
+                      {fieldLabel(field.code)} — {JSON.stringify(field.value)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
+          {method === 'temperature' && (
+            <>
+              <p className="field-help">
+                {t(
+                  'Heating is estimated when the current temperature is below the target; at or above the target it is idle. An off thermostat is idle. Missing readings remain unknown. Thermostat hysteresis and heating schedules can make actual heating differ.',
+                )}
+              </p>
+              {temperature ? (
+                <div className="form-two estimation-fields">
+                  {(['current', 'target'] as const).map((role) => {
+                    const definition = temperature[role];
+                    return (
+                      <label key={role}>
+                        {t(role === 'current' ? 'Current temperature' : 'Target temperature')}
+                        <select
+                          name={`${role}Temperature`}
+                          value={definition.code}
+                          onChange={(event) => {
+                            const field = e.statusFields.find((f) => f.code === event.target.value);
+                            if (field?.temperature)
+                              setTemperature({
+                                ...temperature,
+                                [role]: { code: field.code, ...field.temperature },
+                              });
+                          }}
+                        >
+                          {!e.statusFields.some(
+                            (f) => f.code === definition.code && f.temperature,
+                          ) && <option value={definition.code}>{definition.code}</option>}
+                          {e.statusFields
+                            .filter((f) => f.temperature)
+                            .map((field) => (
+                              <option key={field.code} value={field.code}>
+                                {field.code}
+                              </option>
+                            ))}
+                        </select>
+                        <span className="field-help">
+                          {number(temperatureValue(e.statusFields, definition))} °C
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <Notice tone="warning">
+                  {t(
+                    'No current and target temperature fields with known units and scales were found. Detect again to refresh the device data.',
+                  )}
+                </Notice>
+              )}
+              {detectedTemperature && !matchesDetectedTemperature && (
+                <button
+                  type="button"
+                  className="button secondary compact"
+                  onClick={() => {
+                    setTemperature(e.temperatureSuggestion);
+                    setSaved(false);
+                  }}
+                >
+                  {t('Use detected temperatures')}
+                </button>
+              )}
+            </>
+          )}
           {device.category === 'wk' && (
             <p className="field-help">
               {t(
@@ -295,7 +410,7 @@ function RuntimeEstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
               )}
             </p>
           )}
-          {e.suggestion && code !== e.suggestion.heatingCode && (
+          {method === 'relay' && e.suggestion && code !== e.suggestion.heatingCode && (
             <button
               type="button"
               className="button secondary compact"
@@ -307,17 +422,17 @@ function RuntimeEstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
               {t('Use detected field: {code}', { code: e.suggestion.heatingCode ?? '' })}
             </button>
           )}
-          {code && !selectedField && (
+          {method === 'relay' && code && !selectedField && (
             <Notice tone="warning">
               {t('The selected field is absent from the latest reading. Its assignments are kept.')}
             </Notice>
           )}
-          {selectedField && (
+          {method === 'relay' && selectedField && (
             <p className="field-help">
               {t('Latest state: {value}', { value: JSON.stringify(selectedField.value) })}
             </p>
           )}
-          {choices.length > 0 && (
+          {method === 'relay' && choices.length > 0 && (
             <fieldset className="state-choices">
               <legend>{t('What does each state mean?')}</legend>
               {choices.map((value, index) => (
@@ -346,15 +461,21 @@ function RuntimeEstimationForm({ device, onSaved }: { device: DeviceDetail; onSa
               ))}
             </fieldset>
           )}
-          <p className="field-help">
-            {t(
-              'Assign at least one heating state and one idle state. Unassigned states remain unknown. If a state is missing, detect again after the device reports it.',
-            )}
-          </p>
+          {method === 'relay' && (
+            <p className="field-help">
+              {t(
+                'Assign at least one heating state and one idle state. Unassigned states remain unknown. If a state is missing, detect again after the device reports it.',
+              )}
+            </p>
+          )}
           <label className="check-label">
             <input
               type="checkbox"
-              disabled={!enabled && (!completeMapping || !selectedField)}
+              disabled={
+                !enabled &&
+                (!completeMapping ||
+                  (method === 'temperature' ? currentTemperatureState === null : !selectedField))
+              }
               checked={enabled}
               onChange={(event) => setEnabled(event.target.checked)}
             />

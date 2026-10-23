@@ -141,6 +141,43 @@ if __name__ == '__main__':
     unittest.main()
 
 class StatusTests(unittest.TestCase):
+    def test_full_discovery_includes_metadata_for_missing_or_invalid_readings(self):
+        for status in ([], [{'code': 'temp_current', 'value': float('nan')}]):
+            result = normalize_device({'id': 'd', 'status': status}, {'status': [
+                {'code': 'temp_current', 'type': 'Integer', 'values': '{"scale":0,"unit":"C"}'},
+            ]}, [])
+            self.assertEqual(result.get('temperatureMetadata', {}).get('temp_current'), {'scale': 0, 'unit': 'C'})
+            self.assertIsNone(result['temperatureMetadata']['set_temp'])
+
+    def test_temperature_metadata_preserves_raw_values_and_independent_scales(self):
+        from tuya import status_fields
+        fields = status_fields({'status': [
+            {'code': 'temp_current', 'value': 215},
+            {'code': 'set_temp', 'value': 22},
+            {'code': 'temp_set_f', 'value': 720},
+        ]}, {'status': [
+            {'code': 'temp_current', 'type': 'Integer', 'values': '{"scale":1,"unit":"℃"}'},
+            {'code': 'set_temp', 'type': 'Integer', 'values': '{"scale":0,"unit":"°C"}'},
+            {'code': 'temp_set_f', 'type': 'Integer', 'values': '{"scale":1,"unit":"°F"}'},
+        ]})
+        self.assertEqual(fields, [
+            {'code': 'temp_current', 'value': 215, 'temperature': {'scale': 1, 'unit': 'C'}},
+            {'code': 'set_temp', 'value': 22, 'temperature': {'scale': 0, 'unit': 'C'}},
+            {'code': 'temp_set_f', 'value': 720, 'temperature': {'scale': 1, 'unit': 'F'}},
+        ])
+
+    def test_temperature_metadata_missing_or_invalid_is_explicitly_unusable(self):
+        from tuya import status_fields
+        for meta in ['{}', '{"scale":true,"unit":"C"}', '{"scale":1,"unit":"W"}',
+                     '{"scale":-1,"unit":"C"}', 'broken']:
+            fields = status_fields({'status': [{'code': 'temp_current', 'value': 210}]}, {
+                'status': [{'code': 'temp_current', 'type': 'Integer', 'values': meta}],
+            })
+            self.assertEqual(fields[0].get('temperature', 'absent'), None)
+        # Fast reads carry no specifications; the saved mapping supplies their scale.
+        self.assertNotIn('temperature', status_fields({
+            'status': [{'code': 'temp_current', 'value': 210}]}, {})[0])
+
     def test_missing_enum_range_does_not_erase_previously_observed_choices(self):
         from tuya import status_fields
         for meta in ('{}', '{"range":[]}'):

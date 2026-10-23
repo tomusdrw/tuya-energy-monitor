@@ -161,8 +161,8 @@ export const messages: Messages = {
   'Live while the Tuya connection is active': 'Na żywo, gdy działa połączenie Tuya',
   'We add up energy reports received live. Repeated copies of the same report do not increase usage. Interruptions can leave gaps; earlier reports are not recovered. Point reports do not establish time coverage, so the total remains partial.':
     'Sumujemy raporty energii odebrane na żywo. Powtórzenia tego samego raportu nie zwiększają zużycia. Przerwy w odbiorze mogą powodować braki; nie odtwarzamy wcześniejszych raportów. Raporty punktowe nie potwierdzają pokrycia czasu, dlatego suma pozostaje częściowa.',
-  'The current Tuya connection does not provide an energy meter for this device. You can configure estimation below if an active heating signal is available.':
-    'Obecne połączenie Tuya nie udostępnia licznika energii tego urządzenia. Możesz skonfigurować estymację poniżej, jeśli dostępny jest sygnał aktywnego grzania.',
+  'The current Tuya connection does not provide an energy meter for this device. You can configure estimation below using a heating signal or current and target temperatures.':
+    'Obecne połączenie Tuya nie udostępnia licznika energii tego urządzenia. Możesz skonfigurować estymację poniżej na podstawie sygnału grzania albo temperatury aktualnej i zadanej.',
   'Incremental reports are counted once using the device report time. Interruptions in reception leave gaps. Point reports do not establish time coverage; the total remains partial even with an active connection.':
     'Raporty przyrostowe sumujemy jednokrotnie według czasu raportu urządzenia. Przerwy w odbiorze pozostawiają braki. Raporty punktowe nie potwierdzają pokrycia czasu; suma pozostaje częściowa również przy aktywnym połączeniu.',
   '≈ marks consumption calculated from sampled power or configured heating power × observed heating time. Native power needs no configuration. Totals show each source separately; they are not intended for billing.':

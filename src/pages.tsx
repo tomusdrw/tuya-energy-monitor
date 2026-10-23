@@ -420,7 +420,7 @@ export function DevicePage({ id }: { id: string }) {
       {device.energySource === 'missing' && (
         <Notice tone="warning">
           {t(
-            'The current Tuya connection does not provide an energy meter for this device. You can configure estimation below if an active heating signal is available.',
+            'The current Tuya connection does not provide an energy meter for this device. You can configure estimation below using a heating signal or current and target temperatures.',
           )}
         </Notice>
       )}

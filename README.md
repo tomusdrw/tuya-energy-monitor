@@ -178,21 +178,30 @@ In **Apartments → device → Heating runtime estimation**:
 1. Available fields and states are loaded automatically. Recognized heating signals
    are marked **Suggested** and preselected for new configurations. Use **Detect again**
    to refresh fields and specifications from Tuya through the existing inventory sync.
-   Confirm a field that actually reports the heating relay, such as `work_state`.
-   A general `switch`, selected mode or temperature setpoint is **not** evidence that
-   the heater is drawing power. If no recognized signal is found, the form says so.
+   Choose **Heating signal** for a field reporting the heating relay, such as `work_state`,
+   or **Temperature comparison** for thermostats without a relay signal. The latter is
+   preselected for new configurations when both temperature fields have known units
+   and scales and no relay mapping is recognized. Saved configurations are preserved.
 2. Set the total rated **heating circuit power in kW** (for example 1200 W =
    1.2 kW), not the thermostat's own power or maximum relay rating. Thermostat
    forms (`wk`) prefill **1.25 kW** when no power is saved, an editable assumption
    within the owner's suggested 1–1.5 kW range. Existing configured values are
    preserved. This default does not enable estimation or confirm a relay signal.
-3. Select a detected field, then assign each available state to **Heating active**,
+3. For **Heating signal**, select a detected field, then assign each available state to **Heating active**,
    **Idle**, or **Unknown / ignore**. No field names or JSON need to be typed.
    Choices come from Tuya's metadata and observed states; booleans offer both values.
    Strings, numbers and booleans remain distinct. If metadata is incomplete, detect
    again after the device reports the other state. Confirm suggested assignments
    against the actual device. Unassigned values remain unknown. Refreshing preserves
    edits and saved mappings, including saved values absent from the latest reading.
+   For **Temperature comparison**, select the detected current and target temperatures
+   (`temp_current` / `current_temp` and `temp_set` / `set_temp`, including Fahrenheit
+   equivalents). Each field uses its own declared decimal scale and unit; missing
+   metadata is not guessed. **Current < target means estimated heating; current ≥ target
+   means idle.** A detected `switch` is included in the saved mapping: off means idle,
+   and a missing or unrecognized switch value means unknown. Without a switch field,
+   the estimate uses the two temperatures alone. Hysteresis, schedules and other device
+   controls can make actual relay activity differ; this method estimates heat demand.
 4. Enable and save. The first new observation establishes a baseline; consecutive
    valid observations produce estimates. Device history includes daily kWh and
    the panel shows today's and lifetime observed heating hours.
@@ -207,7 +216,7 @@ observation. Polling can miss short cycles, transitions are only approximated,
 and Tuya may return cached state. This is for overuse detection, not billing.
 
 Each estimate stores its original kWh, ON time and configuration revision.
-Changing power, mapping or enablement starts a new baseline and affects future
+Changing power, method, mapping or enablement starts a new baseline and affects future
 estimates only. Previous energy is never recalculated. Cumulative meters and
 incremental energy reports and native power measurements take precedence for the
 same device. Totals containing estimates or power-derived consumption use
@@ -218,10 +227,10 @@ accuracy of the rated-power assumption.
 The existing sharing-cloud credentials are reused. Local TinyTuya/MQTT push is
 not implemented: this installation has no access to the apartments' LANs. The
 runtime adapter uses read-only cloud polling; incremental energy uses cloud MQTT
-reports. No device commands are sent. The runtime method **requires an exposed
-relay signal**. If the current API returns
-only a thermostat switch and temperature settings, enabling estimation cannot
-recover that missing signal; the panel explicitly stays unknown. Raw recent
+reports. No device commands are sent. Runtime estimation requires either a configured
+relay signal or both current and target temperatures. Missing temperature readings,
+invalid values and changed unit/scale metadata stay unknown; refresh the selected
+temperature mapping after metadata changes. Raw recent
 observations are available in the device detail for diagnostics, and complete
 history remains in SQLite `heating_observations` and `intervals`.
 
