@@ -47,6 +47,25 @@ export const messages: Messages = {
     'Suma jest częściowa. Obejmuje pomiary liczników, zużycie obliczone z mocy i włączone estymacje. Przerwy w odczytach oraz urządzenia bez źródła energii pozostają brakami danych.',
   'Apartment history': 'Historia mieszkania',
   Devices: 'Urządzenia',
+  'Choose which devices count toward the apartment total and alerts. Open a device to see its history.':
+    'Wybierz urządzenia uwzględniane w sumie mieszkania i alertach. Kliknij urządzenie, aby zobaczyć jego historię.',
+  Included: 'Wliczane',
+  Excluded: 'Pomijane',
+  Ignored: 'Ignorowane',
+  Ignore: 'Ignoruj',
+  Restore: 'Przywróć',
+  'Ignore {name}': 'Ignoruj {name}',
+  'Restore {name} to the device list': 'Przywróć {name} na listę urządzeń',
+  'Ignored devices ({count})': 'Ignorowane urządzenia ({count})',
+  'All devices are ignored': 'Wszystkie urządzenia są ignorowane',
+  'Expand the ignored devices below to restore one to the list.':
+    'Rozwiń poniższą listę ignorowanych urządzeń, aby przywrócić wybrane urządzenie.',
+  'Ignored devices are excluded from totals and alerts. Restoring a device keeps monitoring off until you enable it.':
+    'Ignorowane urządzenia nie są wliczane do sum i alertów. Po przywróceniu monitorowanie pozostaje wyłączone, dopóki go nie włączysz.',
+  'This device is ignored. Enabling monitoring also restores it to the device list.':
+    'To urządzenie jest ignorowane. Włączenie monitorowania przywróci je także na listę urządzeń.',
+  'Include {name} in apartment total and alert rules':
+    'Uwzględniaj {name} w sumie mieszkania i regułach alertów',
   'Select a device to view its history and contribution to the total.':
     'Wybierz urządzenie, aby sprawdzić historię i udział w sumie.',
   Device: 'Urządzenie',

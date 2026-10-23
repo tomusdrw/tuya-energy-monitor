@@ -89,6 +89,15 @@ Documentation uses the English interface labels.
 - Set a daily threshold **independently for each apartment**. No threshold is
   enabled by default. Adjust or disable anomaly detection in the same form.
 
+Each apartment's device list has an **Included / Excluded** switch that immediately
+updates its total and the overview. **Ignore** moves a device into the initially
+collapsed **Ignored devices** section and excludes it from totals and alerts.
+Use this for devices you have reviewed and do not need for energy monitoring.
+Ordinary excluded devices remain in the main list. **Restore** returns a device
+to that list with monitoring still off; enable its switch when you want it counted.
+These choices are saved on the server and survive synchronization. Existing devices
+are not automatically marked ignored, and ignoring never deletes their history.
+
 Accounts and devices remain scoped to their account, even if names match.
 Background collection refreshes inventory and energy counters every five minutes,
 and polls native power meters and enabled runtime estimators every 60 seconds
@@ -418,6 +427,9 @@ readings and intervals.
 Language support uses existing metadata and requires no additional schema
 migration. Back up before upgrading; do not run an older application against a
 migrated database.
+
+Schema v6 adds the saved ignored-device status, preserving existing monitoring
+selections and readings.
 
 Run one process per database. Raw readings, heating observations and intervals are retained; size grows
 with time and the number of devices. Schedule volume backups and monitor disk

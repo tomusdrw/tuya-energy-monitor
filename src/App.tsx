@@ -426,7 +426,9 @@ function Shell({ onLogout }: { onLogout: () => void }) {
               )}
             </>
           )}
-          {route.startsWith('home/') && <HomePage id={route.slice(5)} />}
+          {route.startsWith('home/') && (
+            <HomePage id={route.slice(5)} onMonitoringChanged={overview.refresh} />
+          )}
           {route.startsWith('device/') && <DevicePage id={route.slice(7)} />}
           {route === 'accounts' && <AccountsPage />}
           {route === 'alerts' && <NotificationsPage />}
