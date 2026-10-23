@@ -1,6 +1,13 @@
 import type { Messages } from '../../shared/i18n';
 
 export const messages: Messages = {
+  'Energy from measured power': 'Energia z pomiaru mocy',
+  'Energy is calculated automatically from the device’s measured power. No rated power or heating signal configuration is needed.':
+    'Energia jest obliczana automatycznie z mocy mierzonej przez urządzenie. Nie trzeba podawać mocy znamionowej ani konfigurować sygnału grzania.',
+  'We integrate power readings taken every 60 seconds. Missing or invalid readings and gaps over 3 minutes stop counting. ≈ marks consumption calculated from sampled power; it is not a kWh meter reading.':
+    'Obliczamy energię z pomiarów mocy pobieranych co 60 sekund. Brakujące lub nieprawidłowe odczyty i przerwy ponad 3 minuty zatrzymują naliczanie. ≈ oznacza zużycie obliczone z próbek mocy; nie jest to odczyt licznika kWh.',
+  'No current power reading. This period remains missing data.':
+    'Brak aktualnego pomiaru mocy. Ten okres pozostaje luką w danych.',
   'Heating active': 'Grzanie aktywne',
   Idle: 'Postój',
   'Heating state unknown': 'Stan grzania nieznany',

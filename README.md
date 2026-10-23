@@ -69,7 +69,8 @@ Documentation uses the English interface labels.
 
 Accounts and devices remain scoped to their account, even if names match.
 Background collection refreshes inventory and energy counters every five minutes,
-and polls enabled runtime estimators every 60 seconds in batches of 20 devices.
+and polls native power meters and enabled runtime estimators every 60 seconds
+in batches of 20 devices.
 Cloud requests are serialized; slow cloud responses can delay a cycle. Failed
 inventory attempts retry on the five-minute cadence without suppressing relay
 polls. Email delivery has its own serialized job so Resend delays do not block
@@ -77,6 +78,36 @@ state collection.
 No local network access to the apartments is needed. Cloud errors are displayed;
 expired authorization can be renewed with **Reconnect**. Credentials are
 encrypted with AES-256-GCM before storage and never returned to the browser.
+
+## Native power measurements
+
+Devices exposing active power through `cur_power`, `power` or `work_power` are
+supported automatically: no rated power or heating-state configuration is needed.
+The device page shows current watts and **Energy from measured power**. Existing
+device inclusion choices are preserved; include the device in the apartment total
+if it was previously excluded.
+
+Units and decimal scales come from Tuya's field specifications (W or kW).
+For the standard `cur_power` field only, an omitted unit with scale 1 is treated
+as W, following [Tuya's function definition](https://developer.tuya.com/en/docs/iot/product-standard-function-introduction?id=K9tp15ceh63gr).
+Current and voltage alone are not converted to active power: AC power also depends
+on the power factor. Conflicting units and invalid values remain missing data.
+
+Consumption is integrated from consecutive readings using their average power:
+**kWh = (previous W + current W) / 2 × elapsed hours / 1000**. Polls run every
+60 seconds; both observations must be valid and online, no more than 180 seconds
+apart. Missing/offline devices, invalid readings and failed requests break
+continuity. A field or scale change starts a new baseline. There is no backfill
+or extrapolation after the last reading; a short restart can bridge valid persisted
+observations within the same 180-second limit.
+
+Power-derived consumption appears separately as **From power**, including history,
+coverage and notifications, and uses **≈** because polling can miss load changes
+and Tuya may return cached values. It uses actual measured power, rather than an
+assumed heating rating, but is not a direct kWh counter or billing measurement.
+Cumulative counters and live incremental kWh reports take precedence, followed by
+power integration, then configured runtime estimates. Source changes preserve
+history and start a new baseline without adding two sources for the same interval.
 
 ## Thermostat runtime estimates
 
@@ -116,8 +147,8 @@ and Tuya may return cached state. This is for overuse detection, not billing.
 Each estimate stores its original kWh, ON time and configuration revision.
 Changing power, mapping or enablement starts a new baseline and affects future
 estimates only. Previous energy is never recalculated. Cumulative meters and
-incremental energy reports take precedence for the same device. Totals containing
-estimates use
+incremental energy reports and native power measurements take precedence for the
+same device. Totals containing estimates or power-derived consumption use
 **≈**, with measured/estimated components and coverage shown separately in
 cards, chart tooltips and notifications. Coverage measures observed time, not
 accuracy of the rated-power assumption.
@@ -157,7 +188,7 @@ history remains in SQLite `heating_observations` and `intervals`.
   silence: their sum remains partial, with no time coverage added. This also prevents
   anomaly comparisons from treating missing reports as complete days. Daily threshold
   alerts and weekly summaries include the observed increments.
-- Incremental and cumulative measurements take precedence over configured runtime
+- Incremental and cumulative measurements take precedence over power integration and configured runtime
   estimation. Old estimates remain in history; new estimates stop when a measured
   source is discovered, and reports predating that transition are ignored.
 - Offline samples, counter resets, a change of counter field, and intervals
@@ -168,7 +199,7 @@ history remains in SQLite `heating_observations` and `intervals`.
   values are therefore estimates at polling resolution. Warsaw calendar days
   respect daylight saving changes.
 - Coverage is the observed fraction of time across selected devices, including
-  configured runtime estimates. A partial
+  power integration and configured runtime estimates. A partial
   total is an observed subtotal, never a projection for missing heaters. `—`
   means unavailable; `0` requires actual consecutive valid readings.
 - Device inclusion applies to the currently displayed historical totals too.
@@ -179,8 +210,9 @@ history remains in SQLite `heating_observations` and `intervals`.
   `forward_energy_total` in report configuration but omit both its value and schema
   from the sharing API, even while Smart Life displays daily/monthly/yearly energy
   statistics. Their `work_power` is exposed as `powerW` in the monitoring API; it is
-  not a kWh counter. Runtime estimation can use `work_state` and a confirmed fixed
-  heating power, but power readings alone are not currently integrated into energy history.
+  not a kWh counter. Validated `work_power` readings are now integrated into energy
+  history automatically. Runtime estimation using `work_state` and a confirmed
+  fixed heating power remains a fallback when native power is unavailable.
   Tuya provides separate [device statistics APIs](https://developer.tuya.com/en/docs/cloud/device-data-statistic?id=Ka7g7nvnad1rm)
   and [end-user hourly statistics APIs](https://tuya.ai/developer/docs#statistics).
   The existing sharing session was rejected by these APIs in live diagnostics;

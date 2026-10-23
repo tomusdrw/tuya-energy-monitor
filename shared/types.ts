@@ -8,11 +8,13 @@ export interface Rules {
 export interface EnergyStats {
   kwh: number | null;
   measuredKwh: number | null;
+  powerKwh: number | null;
   estimatedKwh: number | null;
   heatingHours: number | null;
   coverage: number;
   monitored: number;
   metered: number;
+  powerMetered: number;
   estimated: number;
   fresh: number;
   complete: boolean;
@@ -21,6 +23,7 @@ export interface HistoryPoint {
   day: string;
   kwh: number | null;
   measuredKwh: number | null;
+  powerKwh: number | null;
   estimatedKwh: number | null;
   heatingHours: number | null;
   coverage: number;
@@ -52,7 +55,7 @@ export interface DeviceView {
   temperature: number | null;
   powerW: number | null;
   stats: EnergyStats;
-  energySource: 'measured' | 'estimated' | 'missing';
+  energySource: 'measured' | 'power' | 'estimated' | 'missing';
   heatingState: 'on' | 'off' | 'unknown';
 }
 export interface HomeView {

@@ -68,8 +68,12 @@ export function useI18n(messages: Messages = {}) {
     date: (at: number | null | undefined, withTime = true) => formatDate(language, at, withTime),
     day: (value: string) => formatDay(language, value),
     percent: (value: number) => `${Math.round(value * 100)}%`,
-    energyNumber: (stats: { kwh: number | null; estimatedKwh: number | null }) =>
-      `${stats.estimatedKwh !== null ? '≈ ' : ''}${number(stats.kwh)}`,
+    energyNumber: (stats: {
+      kwh: number | null;
+      estimatedKwh: number | null;
+      powerKwh?: number | null;
+    }) =>
+      `${stats.estimatedKwh !== null || stats.powerKwh != null ? '≈ ' : ''}${number(stats.kwh)}`,
   };
 }
 

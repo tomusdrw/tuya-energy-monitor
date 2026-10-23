@@ -60,13 +60,49 @@ def read_states(get, device_ids):
                                'statusFields': status_fields(device, {})})
     return result
 
+
+def power_reading(status, specification):
+    definitions = {field['code']: field for field in
+                   specification.get('functions', []) + specification.get('status', [])}
+    for code in ('cur_power', 'power', 'work_power'):
+        field = definitions.get(code, {})
+        if field.get('type', '').lower() not in ('integer', 'value'):
+            continue
+        try:
+            meta = field.get('values', {})
+            if isinstance(meta, str):
+                meta = json.loads(meta)
+            scale = meta.get('scale')
+            if type(scale) is not int or not 0 <= scale <= 9:
+                continue
+            unit = str(meta.get('unit', '')).strip().lower()
+            # Standard Tuya active-power DP: W with scale 1. Do not infer other units.
+            # https://developer.tuya.com/en/docs/iot/product-standard-function-introduction?id=K9tp15ceh63gr
+            if code == 'cur_power' and scale == 1 and not unit:
+                unit = 'w'
+            if unit not in ('w', 'kw'):
+                continue
+            raw = status.get(code)
+            watts = None
+            if type(raw) in (int, float) and math.isfinite(raw) and raw >= 0:
+                value = raw / (10 ** scale) * (1000 if unit == 'kw' else 1)
+                if math.isfinite(value):
+                    watts = value
+            return {'code': code, 'scale': scale, 'unit': 'kW' if unit == 'kw' else 'W'}, watts
+        except (ValueError, TypeError, AttributeError, OverflowError):
+            continue
+    return None, None
+
+
 def normalize_device(device, specification, reports):
     status = {s['code']: s['value'] for s in device.get('status', []) if 'code' in s and 'value' in s}
     types = {r['dp_code']: r.get('report_type') for r in reports}
+    power_field, watts = power_reading(status, specification)
     result = {'id': device['id'], 'name': device.get('name', 'Device'),
               'category': device.get('category', ''), 'online': bool(device.get('online')),
               'energyCode': None, 'counterKwh': None, 'incrementKwh': None, 'energyKind': 'unsupported',
-              'temperature': None, 'powerW': None, 'statusFields': status_fields(device, specification)}
+              'temperature': None, 'powerW': watts, 'powerField': power_field,
+              'statusFields': status_fields(device, specification)}
     for field in specification.get('status', []):
         code = field['code']
         raw = status.get(code)
@@ -85,8 +121,6 @@ def normalize_device(device, specification, reports):
             continue
         if code == 'temp_current' and unit in ('℃', '°c', 'c'):
             result['temperature'] = value
-        if code in ('cur_power', 'power', 'work_power') and unit in ('w', 'kw'):
-            result['powerW'] = value * (1000 if unit == 'kw' else 1)
         # Some sharing schemas omit the unit for standard add_ele increments.
         # Tuya defines this scale-3 DP in kWh; require the explicit sum report type.
         # https://developer.tuya.com/en/docs/iot/1s?id=K9tp11c62qjq8
@@ -101,6 +135,8 @@ def normalize_device(device, specification, reports):
         elif types.get(code) == 'minux' or (code in CUMULATIVE_CODES and types.get(code) in (None, 'un_known')):
             result.update(energyKind='cumulative', energyCode=code, incrementKwh=None,
                           counterKwh=value / (1000 if unit == 'wh' else 1))
+    if result['energyKind'] == 'unsupported' and power_field:
+        result['energyKind'] = 'power'
     return result
 
 
