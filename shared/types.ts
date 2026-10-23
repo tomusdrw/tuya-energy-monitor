@@ -51,6 +51,7 @@ export interface DeviceView {
   name: string;
   category: string;
   included: boolean;
+  ignored: boolean;
   online: boolean;
   present: boolean;
   fresh: boolean;

@@ -5,8 +5,6 @@ import {
   Link2,
   Plus,
   ShieldCheck,
-  Thermometer,
-  Zap,
   Mail,
   Clock3,
   Settings2,
@@ -23,6 +21,7 @@ import type {
 import { api, useApi } from './api';
 import { EstimationForm } from './EstimationForm';
 import { TuyaAiForm } from './TuyaAiForm';
+import { DeviceList } from './DeviceList';
 import { useI18n } from './i18n';
 import { messages } from './locales/pages';
 import {
@@ -161,13 +160,18 @@ function RulesForm({ home, onSaved }: { home: HomeDetail; onSaved: () => void })
   );
 }
 
-export function HomePage({ id }: { id: string }) {
-  const { t, number, date, percent, energyNumber } = useI18n(messages);
+export function HomePage({
+  id,
+  onMonitoringChanged,
+}: {
+  id: string;
+  onMonitoringChanged?: () => void;
+}) {
+  const { t, number, percent, energyNumber } = useI18n(messages);
   const [days, setDays] = useState(14),
     { data: home, error, refresh } = useApi<HomeDetail>(`/homes/${id}?days=${days}`);
   if (error) return <Notice tone="error">{t(error)}</Notice>;
   if (!home) return <Loading />;
-  const devices = [...home.devices].sort((a, b) => Number(b.fresh) - Number(a.fresh));
   return (
     <>
       <a className="back-link" href="#homes">
@@ -227,77 +231,17 @@ export function HomePage({ id }: { id: string }) {
       <div className="panel">
         <SectionTitle
           title={t('Devices')}
-          subtitle={t('Select a device to view its history and contribution to the total.')}
+          subtitle={t(
+            'Choose which devices count toward the apartment total and alerts. Open a device to see its history.',
+          )}
         />
-        {home.devices.length ? (
-          <div className="device-table">
-            <div className="device-row table-head">
-              <span>{t('Device')}</span>
-              <span>{t('Energy measurement')}</span>
-              <span>{t('Today')}</span>
-              <span>{t('Last reading')}</span>
-              <span />
-            </div>
-            {devices.map((d) => (
-              <a
-                className={`device-row${d.fresh ? '' : ' inactive'}`}
-                href={`#device/${d.id}`}
-                key={d.id}
-              >
-                <div className="device-name">
-                  <span className={`device-icon ${d.energySource === 'measured' ? 'blue' : ''}`}>
-                    {d.category === 'wk' ? <Thermometer size={19} /> : <Zap size={19} />}
-                  </span>
-                  <div>
-                    <strong>{d.name}</strong>
-                    <small>
-                      {d.fresh ? t('Online') : t('Inactive · offline or stale readings')}
-                      {!d.included && <> · {t('Excluded from apartment total')}</>}
-                    </small>
-                  </div>
-                </div>
-                <span>
-                  <Badge
-                    tone={
-                      d.energySource === 'measured'
-                        ? 'success'
-                        : d.energySource === 'estimated' || d.energySource === 'power'
-                          ? 'blue'
-                          : 'warning'
-                    }
-                  >
-                    {d.energySource === 'power'
-                      ? t('From measured power')
-                      : d.energySource === 'estimated'
-                        ? d.heatingState === 'unknown'
-                          ? t('Estimate: no signal')
-                          : t('Estimated kWh')
-                        : d.energyKind === 'cumulative'
-                          ? d.measurementProvider === 'tuya_ai'
-                            ? t('Tuya.ai meter')
-                            : t('kWh meter · QR')
-                          : d.energyKind === 'incremental'
-                            ? d.reportingConnected
-                              ? t('Incremental reports')
-                              : t('Reports: disconnected')
-                            : t('No energy data')}
-                  </Badge>
-                </span>
-                <span className="tabular">
-                  {energyNumber(d.stats)} <small>kWh</small>
-                </span>
-                <span className="subtle">
-                  {date(d.measurementProvider === 'tuya_ai' ? d.measurementAt : d.lastSeen)}
-                </span>
-                <ChevronRight size={17} />
-              </a>
-            ))}
-          </div>
-        ) : (
-          <Empty title={t('No devices')}>
-            {t('Check the account connection and refresh the data.')}
-          </Empty>
-        )}
+        <DeviceList
+          devices={home.devices}
+          onSaved={() => {
+            refresh();
+            onMonitoringChanged?.();
+          }}
+        />
       </div>
       <RulesForm key={home.id} home={home} onSaved={refresh} />
     </>
@@ -436,6 +380,11 @@ export function DevicePage({ id }: { id: string }) {
           title={t('Monitoring participation')}
           subtitle={t('Include devices that heat the apartment.')}
         />
+        {device.ignored && (
+          <Notice>
+            {t('This device is ignored. Enabling monitoring also restores it to the device list.')}
+          </Notice>
+        )}
         <label className="check-label">
           <input
             type="checkbox"
