@@ -1,3 +1,4 @@
+import { removePushSchema } from './helpers/schema.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -190,6 +191,7 @@ test('v7 migration keeps energy data without inventing climate timestamps; obser
       .map((c) => c.name);
     for (const column of ['humidity', 'climate_at'])
       if (columns.includes(column)) db.exec(`ALTER TABLE devices DROP COLUMN ${column}`);
+    removePushSchema(db);
     db.exec('PRAGMA user_version=7');
     db.close();
     db = openDatabase(path);

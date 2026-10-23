@@ -1,3 +1,4 @@
+import { removePushSchema } from './helpers/schema.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -216,12 +217,13 @@ test('v5 migration preserves selections, energy and Tuya.ai configuration and pe
     prior.exec('DROP TABLE climate_observations');
     prior.exec('ALTER TABLE devices DROP COLUMN humidity');
     prior.exec('ALTER TABLE devices DROP COLUMN climate_at');
+    removePushSchema(prior);
     prior.exec('PRAGMA user_version=5');
     prior.close();
 
     const migrated = openDatabase(path);
     try {
-      assert.equal(migrated.prepare('PRAGMA user_version').get()?.user_version, 8);
+      assert.equal(migrated.prepare('PRAGMA user_version').get()?.user_version, 9);
       const home = getHome(migrated, f.homeId, f.now + 1)!;
       assert.equal(home.devices.find((d) => d.id === f.id)?.included, true);
       assert.equal(home.devices.find((d) => d.name === 'Sensor')?.included, false);

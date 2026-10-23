@@ -4,7 +4,7 @@ export function openDatabase(path: string): DatabaseSync {
   const db = new DatabaseSync(path);
   const version = (db.prepare('PRAGMA user_version').get() as { user_version: number })
     .user_version;
-  if (version > 8) {
+  if (version > 9) {
     db.close();
     throw new Error('Unsupported database version');
   }
@@ -158,6 +158,39 @@ export function openDatabase(path: string): DatabaseSync {
         );
         CREATE INDEX climate_observations_home_time ON climate_observations(home_id,at);
         PRAGMA user_version=8;
+      `);
+    });
+  if (version < 9)
+    transaction(db, () => {
+      db.exec(`
+        CREATE TABLE push_receivers (
+          id TEXT PRIMARY KEY, endpoint_hash TEXT NOT NULL UNIQUE, secret TEXT NOT NULL,
+          vapid_key TEXT NOT NULL, generation INTEGER NOT NULL DEFAULT 1,
+          name TEXT NOT NULL, language TEXT NOT NULL, kinds TEXT NOT NULL,
+          state TEXT NOT NULL DEFAULT 'active', created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL, last_submitted_at INTEGER, error TEXT
+        );
+        ALTER TABLE sessions ADD COLUMN receiver_id TEXT REFERENCES push_receivers(id);
+        CREATE TABLE push_deliveries (
+          event_id TEXT NOT NULL, receiver_id TEXT NOT NULL REFERENCES push_receivers(id),
+          kind TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+          created_at INTEGER NOT NULL, deadline INTEGER NOT NULL, next_attempt INTEGER NOT NULL,
+          attempts INTEGER NOT NULL DEFAULT 0, submitted_at INTEGER, error TEXT,
+          PRIMARY KEY(event_id,receiver_id)
+        );
+        CREATE INDEX push_deliveries_due ON push_deliveries(status,next_attempt);
+        CREATE TABLE availability_state (
+          subject TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, value TEXT NOT NULL
+        );
+        CREATE TABLE notification_conditions (
+          event_id TEXT NOT NULL REFERENCES notifications(id), subject TEXT NOT NULL,
+          episode TEXT NOT NULL, direction TEXT NOT NULL,
+          PRIMARY KEY(event_id,subject,episode)
+        );
+        ALTER TABLE accounts ADD COLUMN ai_connectivity_at INTEGER;
+        ALTER TABLE accounts ADD COLUMN ai_connectivity_ok INTEGER;
+        ALTER TABLE accounts ADD COLUMN ai_connectivity_active INTEGER NOT NULL DEFAULT 0;
+        PRAGMA user_version=9;
       `);
     });
   return db;

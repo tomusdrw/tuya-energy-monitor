@@ -1,6 +1,6 @@
 # Per-device Web Push notifications
 
-Status: proposed design for approval; implementation has not started.
+Status: approved by the user on 2026-10-23; implementation in progress.
 
 ## Intent and agreed scope
 
