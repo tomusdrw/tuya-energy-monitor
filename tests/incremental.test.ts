@@ -184,6 +184,7 @@ test('v2 migration preserves data and report deduplication survives database reo
     const f = fixture(path);
     // Reconstruct v2, including removal of the later optional Tuya.ai migration.
     f.db.exec('DROP TABLE ai_models');
+    f.db.exec('DROP TABLE climate_observations');
     for (const column of [
       'ai_secret',
       'ai_revision',
@@ -196,6 +197,8 @@ test('v2 migration preserves data and report deduplication survives database reo
     for (const column of [
       'temperature_config',
       'temperature_metadata',
+      'humidity',
+      'climate_at',
       'qr_energy_kind',
       'qr_energy_code',
       'measurement_provider',

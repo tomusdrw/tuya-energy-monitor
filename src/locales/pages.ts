@@ -1,6 +1,8 @@
 import type { Messages } from '../../shared/i18n';
 
 export const messages: Messages = {
+  'Climate history': 'Historia warunków',
+  'Current conditions': 'Aktualne warunki',
   'Use on your phone': 'Korzystaj na telefonie',
   'iPhone: open the Share menu and choose Add to Home Screen. Android: open the browser menu and choose Install app or Add to Home Screen.':
     'iPhone: otwórz menu Udostępnij i wybierz Do ekranu początkowego. Android: otwórz menu przeglądarki i wybierz Zainstaluj aplikację lub Dodaj do ekranu głównego.',

@@ -110,6 +110,42 @@ No local network access to the apartments is needed. Cloud errors are displayed;
 expired authorization can be renewed with **Reconnect**. Credentials are
 encrypted with AES-256-GCM before storage and never returned to the browser.
 
+## Temperature and humidity
+
+Each apartment shows **Home climate**: current average temperature and humidity,
+minimum/maximum, contributing sensor count and the oldest contributing cloud-read
+time. Apartment cards show the averages, and device lists/details show individual
+readings. All available sensors count, including devices excluded or ignored for
+energy monitoring. Each device has equal weight; temperature and humidity have
+separate sensor counts. No data is displayed as `—`, never zero.
+
+Climate is collected with the existing five-minute Sharing/QR inventory sync,
+without extra cloud requests or a Tuya.ai key. Offline or disappeared devices and
+readings older than 15 minutes are omitted from the current summary. Faster energy
+polls do not refresh climate timestamps. Cloud read time does not establish when
+the physical sensor last measured its surroundings.
+
+The adapter recognizes current temperature fields `temp_current`, `current_temp`,
+`va_temperature`, `temp_current_f`, `current_temp_f`, and current humidity fields
+`humidity_value`, `humidity_current`, `cur_humidity`, `va_humidity`. It requires
+numeric schema metadata with explicit unit and scale, converts Fahrenheit to
+Celsius, and accepts humidity from 0 to 100%. Setpoints, unknown fields and
+missing or unsupported units/scales remain unavailable. Tuya documents the standard
+sensor fields in its [temperature/humidity function definition](https://developer.tuya.com/en/docs/iot/zigbee-temperature-and-humidity-sensor-function-definition?id=K9tp1654imwjp).
+
+**Climate history** uses the selected 7/14/30-day range. Dots show daily home
+averages and vertical lines show observed minimum/maximum. Each sensor's daily
+sample mean receives equal weight, so devices with more samples do not dominate.
+**View daily climate readings** provides the values, sensor counts and sample
+counts, including days without readings. Sparse samples do not imply full-day
+coverage; no gaps are interpolated. Days follow Europe/Warsaw, including daylight
+saving changes. Historical samples retain the home where they were collected,
+even after a device moves or disappears.
+
+History starts with collection after this update, persists across restarts and is
+not backfilled from the Tuya mobile app. There are no temperature/humidity alerts
+or device controls.
+
 ## Optional Tuya.ai energy meters
 
 In **Connected accounts**, use the **Tuya.ai** form on the relevant Smart Life
@@ -441,7 +477,12 @@ Schema v6 adds the saved ignored-device status, preserving existing monitoring
 selections and readings. Schema v7 adds temperature-estimation configuration and
 field metadata, preserving existing relay settings and energy history.
 
-Run one process per database. Raw readings, heating observations and intervals are retained; size grows
+Schema v8 adds current humidity, a dedicated climate timestamp and
+`climate_observations` history. Existing temperature values are not assigned a
+fresh timestamp or converted into historical samples during migration; new
+collection supplies the first climate summary.
+
+Run one process per database. Raw readings, climate/heating observations and intervals are retained; size grows
 with time and the number of devices. Schedule volume backups and monitor disk
 space. The first version has no data retention or account deletion UI.
 

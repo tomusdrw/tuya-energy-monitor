@@ -22,6 +22,7 @@ import { api, useApi } from './api';
 import { EstimationForm } from './EstimationForm';
 import { TuyaAiForm } from './TuyaAiForm';
 import { DeviceList } from './DeviceList';
+import { ClimateHistory, ClimateSummaryCards, DeviceClimate } from './Climate';
 import { useI18n } from './i18n';
 import { messages } from './locales/pages';
 import {
@@ -226,6 +227,13 @@ export function HomePage({
           )}
         </Notice>
       )}
+      <ClimateSummaryCards climate={home.climate} />
+      <div className="panel">
+        <SectionTitle title={t('Climate history')}>
+          <Range days={days} setDays={setDays} />
+        </SectionTitle>
+        <ClimateHistory points={home.climateHistory} />
+      </div>
       <div className="panel">
         <SectionTitle title={t('Apartment history')}>
           <Range days={days} setDays={setDays} />
@@ -329,15 +337,8 @@ export function DevicePage({ id }: { id: string }) {
           )}
         </div>
         <div className="stat">
-          <span>{t('Current temperature')}</span>
-          <strong>
-            {number(device.temperature, 1)} <small>°C</small>
-          </strong>
-          <p>
-            {device.temperature === null
-              ? t('No temperature reading')
-              : t('Reading provided by the device')}
-          </p>
+          <span>{t('Current conditions')}</span>
+          <DeviceClimate device={device} detailed />
         </div>
       </div>
       {device.measurementProvider && (
