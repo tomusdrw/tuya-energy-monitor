@@ -15,6 +15,7 @@ import {
 } from './energy.js';
 import { digest } from './crypto.js';
 import { energySource, currentHeatingState } from './estimation.js';
+import { hasFreshPower } from './power.js';
 import type { EnergyStats, NotificationContent } from '../shared/types.js';
 import type { Language } from '../shared/i18n.js';
 import { localizeSystemMessage } from '../shared/systemMessages.js';
@@ -27,12 +28,15 @@ const format = (n: number | null, language: Language) =>
     ? t(language, 'no data')
     : `${language === 'pl' ? n.toFixed(2).replace('.', ',') : n.toFixed(2)} kWh`;
 const energy = (stats: EnergyStats, language: Language) =>
-  `${stats.estimatedKwh !== null ? '≈ ' : ''}${format(stats.kwh, language)}`;
+  `${stats.estimatedKwh !== null || stats.powerKwh !== null ? '≈ ' : ''}${format(stats.kwh, language)}`;
 const sources = (stats: EnergyStats, language: Language) =>
   t(language, 'Measured: {measured}; estimated: {estimated}.', {
     measured: format(stats.measuredKwh, language),
     estimated: format(stats.estimatedKwh, language),
-  });
+  }) +
+  (stats.powerKwh !== null
+    ? ' ' + t(language, 'From power: {power}.', { power: format(stats.powerKwh, language) })
+    : '');
 const coverage = (n: number) => `${Math.round(n * 100)}%`;
 type Row = Record<string, any>;
 
@@ -89,7 +93,7 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
           language,
           'Scope: {metered} with measurements, {estimated} estimated / {monitored} selected devices; time coverage {coverage}.\n',
           {
-            metered: stats.metered,
+            metered: stats.metered + stats.powerMetered,
             estimated: stats.estimated,
             monitored: stats.monitored,
             coverage: coverage(stats.coverage),
@@ -182,7 +186,7 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
                 '\n\nComparable usage (current configuration): {current}.\nAverage by the same time: {average} ({days} comparable days).\n',
                 {
                   current: energy(current, language),
-                  average: `${current.estimatedKwh !== null ? '≈ ' : ''}${format(average, language)}`,
+                  average: `${current.estimatedKwh !== null || current.powerKwh !== null ? '≈ ' : ''}${format(average, language)}`,
                   days: comparable.length,
                 },
               ) +
@@ -229,7 +233,9 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
   const stale = monitored.filter((d) =>
     energySource(d) === 'measured'
       ? !measurementFresh(d, now)
-      : !d.online || !d.present || now - (d.last_seen ?? 0) > MAX_GAP,
+      : energySource(d) === 'power'
+        ? !hasFreshPower(d, now)
+        : !d.online || !d.present || now - (d.last_seen ?? 0) > MAX_GAP,
   );
   const health = accounts(db, now);
   enqueue(
@@ -290,7 +296,7 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
           }) +
           t(
             language,
-            '≈ marks totals containing estimates: heating power × observed heating time. Incomplete totals include only available data. We send summaries even when there were no alerts.',
+            '≈ marks totals containing consumption calculated from sampled power or heating power × observed heating time. Incomplete totals include only available data. We send summaries even when there were no alerts.',
           ),
       };
     },

@@ -72,3 +72,9 @@
 - No safely available live Tuya.ai key; no new device read or same-period Smart Life comparison claimed. Hourly history remains unverified and unused.
 
 Implementation stays in the existing T3 worktree. The user subsequently requested a pull request against main.
+
+## Merge with native power support
+
+Native power keeps the released v4 schema; Tuya.ai is an additive v5 migration. Supported QR sources, including native power, retain precedence over optional Tuya.ai readings. Migration and cross-source regression tests verify preserved history and independent freshness.
+
+After resolving the merge: 123 application tests, 28 Python tests, production build, formatting and whitespace checks passed.

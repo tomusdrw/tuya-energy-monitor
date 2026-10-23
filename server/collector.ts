@@ -124,7 +124,9 @@ export class Collector {
         this.db
           .prepare(
             `SELECT d.remote_id FROM devices d JOIN homes h ON h.id=d.home_id
-        WHERE h.account_id=? AND d.estimate_enabled=1 AND d.energy_kind NOT IN ('cumulative','incremental') AND d.present=1`,
+        WHERE h.account_id=? AND (d.energy_kind='power' OR
+          (d.estimate_enabled=1 AND d.energy_kind NOT IN ('cumulative','incremental')))
+          AND d.present=1`,
           )
           .all(account.id) as { remote_id: string }[]
       ).map((d) => d.remote_id);

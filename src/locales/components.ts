@@ -1,4 +1,9 @@
 export const componentMessages: Record<string, string> = {
+  'From power: {energy} kWh': 'Z pomiaru mocy: {energy} kWh',
+  '{count} from power · ': '{count} z pomiarem mocy · ',
+  'Measured power × time': 'Zmierzona moc × czas',
+  'The chart will appear after the first incremental report or two valid meter, power or configured heating-state readings. We do not import earlier history from the Tuya app.':
+    'Wykres pojawi się po pierwszym raporcie przyrostowym albo dwóch poprawnych odczytach licznika, mocy lub skonfigurowanego stanu grzania. Nie pobieramy wcześniejszej historii z aplikacji Tuya.',
   'Loading data…': 'Wczytuję dane…',
   'Measured: {energy} kWh': 'Pomiar: {energy} kWh',
   'Estimated: {energy} kWh': 'Estymacja: {energy} kWh',

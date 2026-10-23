@@ -492,7 +492,7 @@ test('evaluating an existing historical alert does not attach a translation from
     assert.equal(historical.title, 'Historyczny tytuł');
     assert.equal(historical.body, 'Historyczna treść');
     assert.equal(historical.translations, undefined);
-    assert.equal((f.db.prepare('PRAGMA user_version').get() as any).user_version, 4);
+    assert.equal((f.db.prepare('PRAGMA user_version').get() as any).user_version, 5);
   } finally {
     f.db.close();
   }

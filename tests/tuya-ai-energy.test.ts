@@ -12,7 +12,11 @@ import {
   getOverview,
   dayBounds,
 } from '../server/energy.js';
-import { configureEstimation, recordHeatingState } from '../server/estimation.js';
+import {
+  configureEstimation,
+  recordHeatingState,
+  ingestHeatingSnapshot,
+} from '../server/estimation.js';
 import { ingestEnergyReport } from '../server/incremental.js';
 import { scopedId } from '../server/crypto.js';
 const minute = 60000;
@@ -259,6 +263,106 @@ test('real v3 schema upgrades without losing QR baselines, configuration or hist
     });
     assert.equal(getDevice(db, id, start + 5 * minute)!.stats.kwh, 0.07);
     assert.equal(getDevice(db, id, start + 5 * minute)!.measurementProvider, 'qr');
+  } finally {
+    db.close();
+    rmSync(dir, { recursive: true });
+  }
+});
+
+test('native QR power retains precedence and transitions to and from Tuya.ai never overlap usage', () => {
+  const db = fixture();
+  const power = {
+    energyKind: 'power',
+    powerField: { code: 'cur_power', scale: 1, unit: 'W' },
+    powerW: 1000,
+    statusFields: [{ code: 'cur_power', value: 10000 }],
+  };
+  const fast = (at: number) =>
+    ingestHeatingSnapshot(
+      db,
+      'a',
+      [{ id: 'heater', online: true, statusFields: power.statusFields }],
+      ['heater'],
+      at,
+    );
+  try {
+    inventory(db, start + minute, power);
+    fast(start + 2 * minute);
+    sample(db, start + 3 * minute, 0.37);
+    assert.equal(getDevice(db, id, start + 3 * minute)!.energySource, 'power');
+    assert.equal(getDevice(db, id, start + 3 * minute)!.counterKwh, null);
+
+    inventory(db, start + 4 * minute);
+    sample(db, start + 4 * minute, 0.37);
+    fast(start + 5 * minute); // A delayed QR state must not resume power integration.
+    sample(db, start + 9 * minute, 0.42);
+    assert.equal(getDevice(db, id, start + 9 * minute)!.stats.measuredKwh, 0.05);
+
+    inventory(db, start + 10 * minute, power);
+    assert.equal(getDevice(db, id, start + 10 * minute)!.stats.powerKwh, 0.016667);
+    sample(db, start + 11 * minute, 0.47);
+    fast(start + 11 * minute);
+    const view = getDevice(db, id, start + 11 * minute)!;
+    assert.equal(view.energySource, 'power');
+    assert.equal(view.stats.powerKwh, 0.033333);
+    assert.equal(view.stats.measuredKwh, 0.05);
+    assert.equal(view.stats.kwh, 0.083333);
+    assert.equal(
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM intervals a JOIN intervals b
+      ON a.device_id=b.device_id AND a.end<b.end AND a.start<b.end AND b.start<a.end`,
+        )
+        .get()!.n,
+      0,
+    );
+  } finally {
+    db.close();
+  }
+});
+
+test('released native-power v4 database upgrades to v5 preserving power baselines and history', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const { readFileSync } = await import('node:fs');
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'tem-v4-'));
+  const file = path.join(dir, 'db.sqlite');
+  let db = new DatabaseSync(file);
+  const field = JSON.stringify({ code: 'cur_power', scale: 1, unit: 'W' });
+  try {
+    db.exec(readFileSync(new URL('./fixtures/schema-v4.sql', import.meta.url), 'utf8'));
+    db.exec("INSERT INTO accounts(id,label,secret) VALUES('a','A','encrypted-qr')");
+    db.prepare("INSERT INTO homes(id,account_id,remote_id,name) VALUES(?,'a','h','H')").run(
+      scopedId('a', 'h'),
+    );
+    db.prepare(
+      `INSERT INTO devices(id,home_id,remote_id,name,category,included,online,energy_kind,
+      power_w,power_field,power_updated_at,last_seen,status_updated_at)
+      VALUES(?,?,'heater','Heater','qn',1,1,'power',1000,?,?,?,?)`,
+    ).run(id, scopedId('a', 'h'), field, start, start, start);
+    db.prepare(
+      "INSERT INTO power_observations(device_id,at,power_w,field,source) VALUES(?,?,1000,?,'power')",
+    ).run(id, start, field);
+    db.prepare(
+      "INSERT INTO intervals(device_id,start,end,kwh,source) VALUES(?,?,?,0.02,'power')",
+    ).run(id, start - minute, start);
+    db.close();
+    db = openDatabase(file);
+    assert.equal(db.prepare('PRAGMA user_version').get()!.user_version, 5);
+    assert.equal(db.prepare('SELECT secret FROM accounts').get()!.secret, 'encrypted-qr');
+    assert.equal(db.prepare('SELECT ai_secret FROM accounts').get()!.ai_secret, null);
+    assert.equal(db.prepare('SELECT qr_energy_kind FROM devices').get()!.qr_energy_kind, 'power');
+    ingestHeatingSnapshot(
+      db,
+      'a',
+      [{ id: 'heater', online: true, statusFields: [{ code: 'cur_power', value: 10000 }] }],
+      ['heater'],
+      start + minute,
+    );
+    assert.equal(getDevice(db, id, start + minute)!.stats.powerKwh, 0.036667);
+    assert.equal(getDevice(db, id, start + minute)!.stats.measuredKwh, null);
+    db.close();
+    db = openDatabase(file);
+    assert.equal(getDevice(db, id, start + minute)!.stats.powerKwh, 0.036667);
   } finally {
     db.close();
     rmSync(dir, { recursive: true });

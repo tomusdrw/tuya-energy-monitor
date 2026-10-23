@@ -187,7 +187,7 @@ export function Dashboard({
             <div className="stat">
               <span>{t('Devices with energy readings')}</span>
               <strong>
-                {number(data.stats.metered + data.stats.estimated, 0)}
+                {number(data.stats.metered + data.stats.powerMetered + data.stats.estimated, 0)}
                 <small> / {number(data.stats.monitored, 0)}</small>
               </strong>
               <p>

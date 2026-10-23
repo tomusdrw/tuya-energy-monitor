@@ -57,8 +57,60 @@ class DeviceTests(unittest.TestCase):
             reports.append({'dp_code': 'forward_energy_total', 'report_type': 'minux'})
             result = normalize_device(device, spec, reports)
             self.assertEqual(result['powerW'], raw)
-            self.assertEqual(result['energyKind'], 'unsupported')
+            self.assertEqual(result['energyKind'], 'power')
             self.assertIsNone(result['counterKwh'])
+
+    def test_native_power_uses_schema_scale_and_units_without_rated_power(self):
+        for code, raw, unit, scale, watts in [
+                ('cur_power', 12500, 'W', 1, 1250),
+                ('power', 125, 'kW', 2, 1250),
+                ('work_power', 800, 'w', 0, 800),
+                ('cur_power', 0, 'W', 1, 0),
+                ('cur_power', 12500, '', 1, 1250)]:
+            with self.subTest(code=code, unit=unit, raw=raw):
+                result = normalize_device(*self.device(code, raw, 'un_known', unit, scale))
+                self.assertEqual(result['energyKind'], 'power')
+                self.assertEqual(result['powerW'], watts)
+                self.assertEqual(result['powerField'], {
+                    'code': code, 'scale': scale, 'unit': 'kW' if unit == 'kW' else 'W'})
+                self.assertIsNone(result['counterKwh'])
+
+    def test_power_capability_survives_missing_or_invalid_readings(self):
+        for raw in (None, True, -1, '12500', float('nan'), float('inf')):
+            result = normalize_device(*self.device('cur_power', raw, 'un_known', 'W', 1))
+            self.assertEqual(result['energyKind'], 'power')
+            self.assertIsNone(result['powerW'])
+
+    def test_power_requires_valid_metadata_and_never_multiplies_current_by_voltage(self):
+        for code, unit, scale in [('cur_power', 'VA', 1), ('cur_power', 'kWh', 1),
+                                  ('cur_power', '', 0), ('cur_power', 'W', True),
+                                  ('cur_power', 'W', None), ('cur_power', 'W', -1),
+                                  ('power', '', 1), ('cur_current', 'mA', 0),
+                                  ('cur_voltage', 'V', 1)]:
+            result = normalize_device(*self.device(code, 123, 'un_known', unit, scale))
+            self.assertEqual(result['energyKind'], 'unsupported')
+            self.assertIsNone(result['powerW'])
+
+    def test_energy_meters_take_precedence_over_power_regardless_of_field_order(self):
+        for code, report, kind in [('total_forward_energy', 'minux', 'cumulative'),
+                                    ('add_ele', 'sum', 'incremental')]:
+            device, spec, reports = self.device(code, 100, report, 'kWh', 3)
+            device['status'].append({'code': 'cur_power', 'value': 10000})
+            spec['status'].append({'code': 'cur_power', 'type': 'Integer',
+                                   'values': {'unit': 'W', 'scale': 1}})
+            for definitions in (spec['status'], list(reversed(spec['status']))):
+                result = normalize_device(device, {'status': definitions}, reports)
+                self.assertEqual(result['energyKind'], kind)
+                self.assertEqual(result['powerW'], 1000)
+
+    def test_power_metadata_may_be_in_functions_without_a_current_value(self):
+        device, spec, reports = self.device('cur_power', 12500, 'un_known', 'W', 1)
+        result = normalize_device(device, {'functions': spec['status']}, reports)
+        self.assertEqual(result['powerW'], 1250)
+        device['status'] = []
+        result = normalize_device(device, spec, reports)
+        self.assertEqual(result['energyKind'], 'power')
+        self.assertIsNone(result['powerW'])
 
     def test_unit_and_counter_semantics_must_be_known(self):
         for args in [self.device(unit=''), self.device('mystery', report='un_known'), self.device(raw=-1)]:

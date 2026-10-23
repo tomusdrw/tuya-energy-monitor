@@ -4,7 +4,7 @@ export function openDatabase(path: string): DatabaseSync {
   const db = new DatabaseSync(path);
   const version = (db.prepare('PRAGMA user_version').get() as { user_version: number })
     .user_version;
-  if (version > 4) {
+  if (version > 5) {
     db.close();
     throw new Error('Unsupported database version');
   }
@@ -90,6 +90,19 @@ export function openDatabase(path: string): DatabaseSync {
   if (version < 4)
     transaction(db, () => {
       db.exec(`
+        ALTER TABLE devices ADD COLUMN power_field TEXT;
+        ALTER TABLE devices ADD COLUMN power_updated_at INTEGER;
+        CREATE TABLE power_observations (
+          device_id TEXT NOT NULL REFERENCES devices(id), at INTEGER NOT NULL,
+          power_w REAL CHECK(power_w>=0), field TEXT, source TEXT NOT NULL,
+          PRIMARY KEY(device_id,at)
+        );
+        PRAGMA user_version=4;
+      `);
+    });
+  if (version < 5)
+    transaction(db, () => {
+      db.exec(`
         ALTER TABLE accounts ADD COLUMN ai_secret TEXT;
         ALTER TABLE accounts ADD COLUMN ai_revision INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE accounts ADD COLUMN ai_region TEXT;
@@ -111,7 +124,7 @@ export function openDatabase(path: string): DatabaseSync {
           device_id TEXT PRIMARY KEY REFERENCES devices(id),
           revision INTEGER NOT NULL, fetched_at INTEGER NOT NULL, meters TEXT NOT NULL
         );
-        PRAGMA user_version=4;
+        PRAGMA user_version=5;
       `);
     });
   return db;
