@@ -213,7 +213,7 @@ export function HomePage({ id }: { id: string }) {
       {!home.stats.complete && (
         <Notice tone="warning">
           {t(
-            'This total is partial. It includes meter readings and enabled estimates. Reading gaps and devices without an energy source remain missing data.',
+            'This total is partial. It includes meter readings, consumption calculated from power and enabled estimates. Reading gaps and devices without an energy source remain missing data.',
           )}
         </Notice>
       )}
@@ -260,22 +260,24 @@ export function HomePage({ id }: { id: string }) {
                     tone={
                       d.energySource === 'measured'
                         ? 'success'
-                        : d.energySource === 'estimated'
+                        : d.energySource === 'estimated' || d.energySource === 'power'
                           ? 'blue'
                           : 'warning'
                     }
                   >
-                    {d.energySource === 'estimated'
-                      ? d.heatingState === 'unknown'
-                        ? t('Estimate: no signal')
-                        : t('Estimated kWh')
-                      : d.energyKind === 'cumulative'
-                        ? t('kWh meter')
-                        : d.energyKind === 'incremental'
-                          ? d.reportingConnected
-                            ? t('Incremental reports')
-                            : t('Reports: disconnected')
-                          : t('No energy data')}
+                    {d.energySource === 'power'
+                      ? t('From measured power')
+                      : d.energySource === 'estimated'
+                        ? d.heatingState === 'unknown'
+                          ? t('Estimate: no signal')
+                          : t('Estimated kWh')
+                        : d.energyKind === 'cumulative'
+                          ? t('kWh meter')
+                          : d.energyKind === 'incremental'
+                            ? d.reportingConnected
+                              ? t('Incremental reports')
+                              : t('Reports: disconnected')
+                            : t('No energy data')}
                   </Badge>
                 </span>
                 <span className="tabular">
@@ -346,9 +348,20 @@ export function DevicePage({ id }: { id: string }) {
         </div>
         <div className="stat">
           <span>
-            {device.energyKind === 'incremental' ? t('Report reception') : t('Meter reading')}
+            {device.energySource === 'power'
+              ? t('Current power')
+              : device.energyKind === 'incremental'
+                ? t('Report reception')
+                : t('Meter reading')}
           </span>
-          {device.energyKind === 'incremental' ? (
+          {device.energySource === 'power' ? (
+            <>
+              <strong>
+                {number(device.powerW, 1)} <small>W</small>
+              </strong>
+              <p>{t('Reading provided by the device')}</p>
+            </>
+          ) : device.energyKind === 'incremental' ? (
             <>
               <strong>{device.reportingConnected ? t('Connected') : t('Disconnected')}</strong>
               <p>{t('Last report: {date}', { date: date(device.lastEnergyReport) })}</p>
@@ -741,12 +754,12 @@ export function SettingsPage() {
         </p>
         <p>
           {t(
-            'An estimate (≈) is the configured power in kW × observed heating time in hours. Enable it in device details. Totals separate measurements from estimates; they are not intended for billing.',
+            '≈ marks consumption calculated from sampled power or configured heating power × observed heating time. Native power needs no configuration. Totals show each source separately; they are not intended for billing.',
           )}
         </p>
         <p>
           {t(
-            'A missing energy source, offline device, or meter reset leaves a gap. The gap limit is 15 minutes for meters and 3 minutes for estimates. Coverage shows how much of the time and selected devices have readings. A dash (—) means no data.',
+            'A missing energy source, offline device, or meter reset leaves a gap. The gap limit is 15 minutes for meters and 3 minutes for power readings and runtime estimates. Coverage shows how much of the time and selected devices have readings. A dash (—) means no data.',
           )}
         </p>
         <p>

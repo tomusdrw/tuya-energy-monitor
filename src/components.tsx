@@ -110,10 +110,13 @@ export function PageTitle({
 }
 export function EnergyBreakdown({ stats }: { stats: EnergyStats }) {
   const { t, number } = useI18n(componentMessages);
-  if (stats.estimatedKwh === null) return null;
+  if (stats.estimatedKwh === null && stats.powerKwh === null) return null;
   return (
     <div className="energy-breakdown">
       <span>{t('Measured: {energy} kWh', { energy: number(stats.measuredKwh) })}</span>
+      {stats.powerKwh !== null && (
+        <span>{t('From power: {energy} kWh', { energy: number(stats.powerKwh) })}</span>
+      )}
       <span>{t('Estimated: {energy} kWh', { energy: number(stats.estimatedKwh) })}</span>
     </div>
   );
@@ -123,6 +126,9 @@ export function Coverage({ stats }: { stats: EnergyStats }) {
   return (
     <span className="coverage">
       <span className={`status-dot ${stats.complete ? 'green' : 'amber'}`} />
+      {stats.powerMetered > 0 && (
+        <>{t('{count} from power · ', { count: number(stats.powerMetered, 0) })}</>
+      )}
       {t(
         '{metered} measured · {estimated} estimated / {monitored} selected · {coverage} time coverage',
         {
@@ -159,7 +165,7 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
     return (
       <Empty title={t('Your history starts here')}>
         {t(
-          'The chart will appear after the first incremental report or two valid meter readings or configured heating-state readings. We do not import earlier history from the Tuya app.',
+          'The chart will appear after the first incremental report or two valid meter, power or configured heating-state readings. We do not import earlier history from the Tuya app.',
         )}
       </Empty>
     );
@@ -207,7 +213,10 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
                     estimated: number(p.estimatedKwh),
                     coverage: percent(p.coverage),
                   },
-                )}
+                ) +
+                  (p.powerKwh !== null
+                    ? `; ${t('From power: {energy} kWh', { energy: number(p.powerKwh) })}`
+                    : '')}
               </title>
               {p.kwh === null ? (
                 <rect
@@ -228,6 +237,18 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
                       height={Math.max(2, ((p.measuredKwh ?? 0) / max) * chartHeight)}
                       rx={2}
                       className={p.coverage >= 0.95 ? 'bar' : 'bar-partial'}
+                    />
+                  )}
+                  {p.powerKwh !== null && (
+                    <rect
+                      x={pad + i * slot + slot * 0.2}
+                      y={
+                        175 - Math.max(2, (((p.measuredKwh ?? 0) + p.powerKwh) / max) * chartHeight)
+                      }
+                      width={slot * 0.6}
+                      height={Math.max(2, (p.powerKwh / max) * chartHeight)}
+                      rx={2}
+                      className={p.coverage >= 0.95 ? 'bar-power' : 'bar-power partial'}
                     />
                   )}
                   {p.estimatedKwh !== null && (
@@ -260,6 +281,10 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
         <span>
           <i className="legend-blue" />
           {t('Energy measurement')}
+        </span>
+        <span>
+          <i className="legend-power" />
+          {t('Measured power × time')}
         </span>
         <span>
           <i className="legend-purple" />

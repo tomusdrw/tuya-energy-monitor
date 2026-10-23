@@ -16,6 +16,7 @@ import { localizeSystemMessage } from '../shared/systemMessages.js';
 import { scopedId } from './crypto.js';
 import { transaction } from './db.js';
 import { STREAM_FRESHNESS } from './incremental.js';
+import { powerFieldSchema, recordPower, hasFreshPower } from './power.js';
 import {
   recordHeatingState,
   statusFieldsSchema,
@@ -41,9 +42,10 @@ export const snapshotSchema = z.object({
           online: z.boolean(),
           energyCode: z.string().max(100).nullable(),
           counterKwh: z.number().finite().nonnegative().nullable(),
-          energyKind: z.enum(['cumulative', 'incremental', 'unsupported']),
+          energyKind: z.enum(['cumulative', 'incremental', 'power', 'unsupported']),
           temperature: nullableNumber,
           powerW: nullableNumber,
+          powerField: powerFieldSchema.nullable().default(null),
           statusFields: statusFieldsSchema.default([]),
         }),
       ),
@@ -102,12 +104,13 @@ export function ingestSnapshot(
             'SELECT status_updated_at,energy_kind,energy_code,incremental_since FROM devices WHERE id=?',
           )
           .get(id) as Row | undefined;
-        if (previousDevice?.status_updated_at > now) {
+        if (previousDevice?.status_updated_at >= now) {
           db.prepare('UPDATE devices SET present=1 WHERE id=?').run(id);
           continue;
         }
         const counter = device.energyKind === 'cumulative' ? device.counterKwh : null;
         const included =
+          device.energyKind === 'power' ||
           device.energyKind === 'incremental' ||
           counter !== null ||
           ['wk', 'qn', 'rs', 'dr', 'dlq'].includes(device.category);
@@ -131,6 +134,10 @@ export function ingestSnapshot(
           counter,
           device.temperature,
           device.powerW,
+        );
+        db.prepare('UPDATE devices SET power_field=? WHERE id=?').run(
+          device.powerField ? JSON.stringify(device.powerField) : null,
+          id,
         );
         if (
           device.energyKind === 'incremental' &&
@@ -162,6 +169,7 @@ export function ingestSnapshot(
             counter - last.counter_kwh,
           );
         }
+        recordPower(db, id, device.statusFields, device.online, now);
         recordHeatingState(db, id, device.statusFields, device.online, now);
       }
     }
@@ -178,7 +186,10 @@ export function ingestSnapshot(
         'SELECT d.id FROM devices d JOIN homes h ON h.id=d.home_id WHERE h.account_id=? AND d.present=0',
       )
       .all(accountId) as Row[];
-    for (const d of absent) recordHeatingState(db, d.id, [], false, now);
+    for (const d of absent) {
+      recordPower(db, d.id, [], false, now);
+      recordHeatingState(db, d.id, [], false, now);
+    }
     db.prepare('UPDATE accounts SET last_sync=?,error=NULL WHERE id=?').run(now, accountId);
   });
 }
@@ -200,10 +211,12 @@ export function usage(
   options: { comparable?: boolean } = {},
 ): EnergyStats {
   let measured = 0,
+    power = 0,
     estimated = 0,
     onMs = 0,
     milliseconds = 0;
   let measuredCount = 0,
+    powerCount = 0,
     estimatedCount = 0,
     fresh = 0,
     covered = 0;
@@ -213,7 +226,7 @@ export function usage(
     SUM(on_ms * (MIN(end,?) - MAX(start,?)) / (end-start)) AS on_ms,
     SUM(MIN(end,?) - MAX(start,?)) AS duration
     FROM intervals WHERE device_id=? AND end>? AND start<?
-    AND (?=0 OR (source=? AND (source='measured' OR config_revision=?))) GROUP BY source`);
+    AND (?=0 OR (source=? AND (source!='estimated' OR config_revision=?))) GROUP BY source`);
   for (const d of selected) {
     const source = energySource(d);
     if (!options.comparable || source === 'measured') {
@@ -248,6 +261,9 @@ export function usage(
         estimated += r.kwh;
         onMs += r.on_ms;
         estimatedCount++;
+      } else if (r.source === 'power') {
+        power += r.kwh;
+        powerCount++;
       } else {
         measured += r.kwh;
         measuredCount++;
@@ -266,14 +282,16 @@ export function usage(
       ((source === 'measured' &&
         (d.energy_kind !== 'incremental' ||
           (d.energy_stream_at !== null && now - d.energy_stream_at <= STREAM_FRESHNESS))) ||
+        (source === 'power' && hasFreshPower(d, now)) ||
         (source === 'estimated' && currentHeatingState(db, d, now) !== 'unknown'))
     )
       fresh++;
   }
   const round = (value: number) => Math.round(value * 1e6) / 1e6;
   return {
-    kwh: measuredCount + estimatedCount ? round(measured + estimated) : null,
+    kwh: measuredCount + powerCount + estimatedCount ? round(measured + power + estimated) : null,
     measuredKwh: measuredCount ? round(measured) : null,
+    powerKwh: powerCount ? round(power) : null,
     estimatedKwh: estimatedCount ? round(estimated) : null,
     heatingHours: estimatedCount ? round(onMs / 3600000) : null,
     coverage: selected.length
@@ -281,6 +299,7 @@ export function usage(
       : 0,
     monitored: selected.length,
     metered: selected.filter((d) => energySource(d) === 'measured').length,
+    powerMetered: selected.filter((d) => energySource(d) === 'power').length,
     estimated: selected.filter((d) => energySource(d) === 'estimated').length,
     fresh,
     complete: selected.length > 0 && covered === selected.length && fresh === selected.length,
@@ -297,6 +316,7 @@ function history(db: DatabaseSync, devices: Row[], now: number, days: number): H
       day,
       kwh: stats.kwh,
       measuredKwh: stats.measuredKwh,
+      powerKwh: stats.powerKwh,
       estimatedKwh: stats.estimatedKwh,
       heatingHours: stats.heatingHours,
       coverage: stats.coverage,
@@ -374,7 +394,10 @@ function deviceView(db: DatabaseSync, d: Row, now: number): DeviceView {
     included: Boolean(d.included),
     online: Boolean(d.online),
     present: Boolean(d.present),
-    fresh: Boolean(d.online && d.present && d.last_seen !== null && now - d.last_seen <= MAX_GAP),
+    fresh:
+      d.energy_kind === 'power'
+        ? hasFreshPower(d, now)
+        : Boolean(d.online && d.present && d.last_seen !== null && now - d.last_seen <= MAX_GAP),
     lastSeen: d.last_seen,
     energyKind: d.energy_kind,
     energyCode: d.energy_code,
@@ -387,7 +410,7 @@ function deviceView(db: DatabaseSync, d: Row, now: number): DeviceView {
     ).at,
     counterKwh: d.counter_kwh,
     temperature: d.temperature,
-    powerW: d.power_w,
+    powerW: d.power_field ? (hasFreshPower(d, now) ? d.power_w : null) : d.power_w,
     energySource: energySource(d),
     heatingState: energySource(d) === 'estimated' ? currentHeatingState(db, d, now) : 'unknown',
     stats: usage(db, [{ ...d, included: 1 }], dayBounds(localDate(now)).start, now, now),

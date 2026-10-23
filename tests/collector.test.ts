@@ -50,6 +50,45 @@ function fixture(tuya: TuyaCall, streamFactory?: StreamFactory) {
   return { db, collector, advance, now: () => now };
 }
 
+test('collector polls native power without estimation and breaks continuity on failed inventory or status reads', async () => {
+  let fail = false;
+  const powered = {
+    ...device,
+    energyKind: 'power',
+    powerField: { code: 'cur_power', scale: 1, unit: 'W' },
+    powerW: 1200,
+    statusFields: [{ code: 'cur_power', value: 12000 }],
+  };
+  const f = fixture(async (operation, payload) => {
+    if (fail) return { ok: false };
+    if (operation === 'states') {
+      assert.deepEqual(payload.deviceIds, ['d']);
+      return { ok: true, states: [powered] };
+    }
+    return { ok: true, snapshot: { homes: [{ id: 'h', name: 'H', devices: [powered] }] } };
+  });
+  try {
+    await f.collector.sync(false);
+    const id = devicesFor(f.db)[0].id;
+    f.advance();
+    await f.collector.sync(false);
+    assert.equal(getDevice(f.db, id, f.now())!.stats.powerKwh, 0.02);
+    for (const forceFull of [false, true]) {
+      fail = true;
+      f.advance();
+      await f.collector.sync(forceFull);
+      assert.equal(getDevice(f.db, id, f.now())!.fresh, false);
+      fail = false;
+      f.advance();
+      await f.collector.sync(false);
+      assert.equal(getDevice(f.db, id, f.now())!.stats.powerKwh, 0.02);
+    }
+  } finally {
+    await f.collector.stop();
+    f.db.close();
+  }
+});
+
 test('collector reads full inventory every five minutes and only enabled thermostat states between, preserving refreshed credentials', async () => {
   const calls: { operation: string; payload: any }[] = [];
   const renewed = { ...session, token_info: { ...session.token_info, access_token: 'new' } };

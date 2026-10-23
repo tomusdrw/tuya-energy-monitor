@@ -1,6 +1,7 @@
 import { translate, type Language, type MessageParams } from '../shared/i18n.js';
 
 const messages = {
+  'From power: {power}.': 'Z pomiaru mocy: {power}.',
   'no data': 'brak danych',
   'Measured: {measured}; estimated: {estimated}.': 'Pomiar: {measured}; estymacja: {estimated}.',
   'Home: {name}\nDay: {day}\nObserved usage: {energy}\n{sources}\n':
@@ -33,8 +34,8 @@ const messages = {
   'Estimation without a current heating signal: {count}{names}.\n':
     'Estymacja bez aktualnego sygnału grzania: {count}{names}.\n',
   'Offline or stale: {count}{names}.\n\n': 'Offline lub nieaktualne: {count}{names}.\n\n',
-  '≈ marks totals containing estimates: heating power × observed heating time. Incomplete totals include only available data. We send summaries even when there were no alerts.':
-    '≈ oznacza sumę zawierającą estymację: moc ogrzewania × zaobserwowany czas grzania. Niepełne sumy obejmują wyłącznie dostępne dane. Podsumowanie wysyłamy również wtedy, gdy nie było alertów.',
+  '≈ marks totals containing consumption calculated from sampled power or heating power × observed heating time. Incomplete totals include only available data. We send summaries even when there were no alerts.':
+    '≈ oznacza sumę zawierającą zużycie obliczone z próbek mocy lub z mocy ogrzewania × zaobserwowany czas grzania. Niepełne sumy obejmują wyłącznie dostępne dane. Podsumowanie wysyłamy również wtedy, gdy nie było alertów.',
   'Energy: weekly summary {start}': 'Energia: podsumowanie tygodnia {start}',
 };
 

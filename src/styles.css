@@ -1665,6 +1665,15 @@ nav a.active {
 .bar-estimated {
   fill: #9772d3;
 }
+.bar-power {
+  fill: #21866f;
+}
+.bar-power.partial {
+  opacity: 0.55;
+}
+.legend-power {
+  background: #21866f;
+}
 .bar-estimated.partial {
   fill: #cbb7e9;
 }

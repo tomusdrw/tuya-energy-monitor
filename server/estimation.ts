@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { transaction } from './db.js';
 import type { EstimationConfig, EstimationView, StatusField } from '../shared/types.js';
 import { statusChoices, suggestHeatingMapping } from '../shared/estimation.js';
+import { recordPower } from './power.js';
 
 export const MAX_HEATING_GAP = 180000;
 const scalar = z.union([z.boolean(), z.number().finite(), z.string().max(100)]);
@@ -49,8 +50,9 @@ export function estimationConfig(d: Row): EstimationConfig {
     offValues: JSON.parse(d.heating_off_values),
   };
 }
-export function energySource(d: Row): 'measured' | 'estimated' | 'missing' {
+export function energySource(d: Row): 'measured' | 'power' | 'estimated' | 'missing' {
   if (d.energy_kind === 'cumulative' || d.energy_kind === 'incremental') return 'measured';
+  if (d.energy_kind === 'power') return 'power';
   return d.estimate_enabled && d.rated_power_kw > 0 && d.heating_code ? 'estimated' : 'missing';
 }
 
@@ -220,6 +222,7 @@ export function ingestHeatingSnapshot(
           now,
           d.id,
         );
+      recordPower(db, d.id, state?.statusFields ?? [], state?.online ?? false, now);
       recordHeatingState(db, d.id, state?.statusFields ?? [], state?.online ?? false, now);
     }
   });

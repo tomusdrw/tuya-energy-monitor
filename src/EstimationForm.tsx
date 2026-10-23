@@ -17,6 +17,54 @@ const fieldLabels: Record<string, string> = {
 };
 
 export function EstimationForm({ device, onSaved }: { device: DeviceDetail; onSaved: () => void }) {
+  return device.energySource === 'power' ? (
+    <PowerMonitoring device={device} />
+  ) : (
+    <RuntimeEstimationForm device={device} onSaved={onSaved} />
+  );
+}
+
+function PowerMonitoring({ device }: { device: DeviceDetail }) {
+  const { t, date } = useI18n(messages);
+  return (
+    <section className="panel">
+      <SectionTitle title={t('Energy from measured power')} />
+      <Notice>
+        {t(
+          'Energy is calculated automatically from the device’s measured power. No rated power or heating signal configuration is needed.',
+        )}
+      </Notice>
+      <p className="field-help">
+        {t(
+          'We integrate power readings taken every 60 seconds. Missing or invalid readings and gaps over 3 minutes stop counting. ≈ marks consumption calculated from sampled power; it is not a kWh meter reading.',
+        )}
+      </p>
+      {!device.fresh && (
+        <Notice tone="warning">
+          {t('No current power reading. This period remains missing data.')}
+        </Notice>
+      )}
+      <details className="estimation-details">
+        <summary>{t('Available fields and latest states')}</summary>
+        <p className="field-help">
+          {t(
+            'Last field reading: {date}. This data comes from the cloud and does not confirm a new transmission from the device.',
+            { date: date(device.estimation.statusUpdatedAt) },
+          )}
+        </p>
+        {device.estimation.statusFields.map((field) => (
+          <p key={field.code}>
+            <code>
+              {field.code}: {JSON.stringify(field.value)}
+            </code>
+          </p>
+        ))}
+      </details>
+    </section>
+  );
+}
+
+function RuntimeEstimationForm({ device, onSaved }: { device: DeviceDetail; onSaved: () => void }) {
   const { t, number, date } = useI18n(messages);
   const [probed, setProbed] = useState<EstimationView | null>(null);
   const e =
