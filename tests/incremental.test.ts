@@ -1,3 +1,4 @@
+import { removePushSchema } from './helpers/schema.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -210,6 +211,7 @@ test('v2 migration preserves data and report deduplication survives database reo
       f.db.exec(`ALTER TABLE devices DROP COLUMN ${column}`);
     for (const column of ['provider', 'series'])
       f.db.exec(`ALTER TABLE readings DROP COLUMN ${column}`);
+    removePushSchema(f.db);
     f.db.exec(`DROP TABLE power_observations;
       ALTER TABLE devices DROP COLUMN power_field;
       ALTER TABLE devices DROP COLUMN power_updated_at;

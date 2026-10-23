@@ -19,7 +19,8 @@ import { hasFreshPower } from './power.js';
 import type { EnergyStats, NotificationContent } from '../shared/types.js';
 import type { Language } from '../shared/i18n.js';
 import { localizeSystemMessage } from '../shared/systemMessages.js';
-import { transaction } from './db.js';
+import { enqueueNotification, emailEnabled } from './notificationEvents.js';
+import type { PushKind } from '../shared/push.js';
 import { notificationText as t } from './notificationMessages.js';
 import { emailConfigured, type Config } from './config.js';
 
@@ -44,25 +45,11 @@ function enqueue(
   db: DatabaseSync,
   id: string,
   homeId: string | null,
-  kind: string,
+  kind: PushKind,
   content: (language: Language) => NotificationContent,
   now: number,
 ) {
-  transaction(db, () => {
-    const english = content('en');
-    const inserted = db
-      .prepare(
-        'INSERT OR IGNORE INTO notifications(id,home_id,kind,title,body,created_at) VALUES(?,?,?,?,?,?)',
-      )
-      .run(id, homeId, kind, english.title, english.body, now);
-    // Only new events get translations: retries and historical records stay unchanged.
-    // The existing metadata table avoids a schema/data migration for display-only text.
-    if (inserted.changes)
-      db.prepare('INSERT OR REPLACE INTO metadata(key,value) VALUES(?,?)').run(
-        `notification-pl/${id}`,
-        JSON.stringify(content('pl')),
-      );
-  });
+  enqueueNotification(db, { id, homeId, kind, content, now });
 }
 
 export function evaluateNotifications(db: DatabaseSync, now: number): void {
@@ -310,7 +297,7 @@ export async function deliverPending(
   now: number,
   transport: typeof fetch = fetch,
 ): Promise<void> {
-  if (!emailConfigured(config)) return;
+  if (!emailConfigured(config) || !emailEnabled(db)) return;
   db.prepare("INSERT OR IGNORE INTO metadata(key,value) VALUES('instance_id',?)").run(randomUUID());
   const instance = (
     db.prepare("SELECT value FROM metadata WHERE key='instance_id'").get() as { value: string }
@@ -321,6 +308,7 @@ export async function deliverPending(
     )
     .all(now) as Row[];
   for (const event of pending) {
+    if (!emailEnabled(db)) break;
     if (event.first_attempt !== null && now - event.first_attempt >= 23 * 3600000) {
       db.prepare("UPDATE notifications SET status='uncertain',error=? WHERE id=?").run(
         'The safe retry window expired. Check delivery in Resend.',
