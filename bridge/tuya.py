@@ -4,10 +4,12 @@ import logging
 import math
 import re
 import sys
+from pathlib import Path
 from urllib.parse import urlsplit
 
 CLIENT_ID = 'HA_3y9q4ak7g4ephrvke'
-CUMULATIVE_CODES = {'total_forward_energy', 'forward_energy_total', 'total_energy', 'total_ele'}
+ENERGY_POLICY = json.loads((Path(__file__).resolve().parent.parent / 'shared/energy-policy.json').read_text())
+CUMULATIVE_CODES = set(ENERGY_POLICY['cumulativeCodes'])
 
 
 
@@ -77,7 +79,7 @@ def normalize_device(device, specification, reports):
             if isinstance(meta, str):
                 meta = json.loads(meta)
             scale = meta.get('scale')
-            if not isinstance(scale, int) or not 0 <= scale <= 9:
+            if not isinstance(scale, int) or not 0 <= scale <= ENERGY_POLICY['maxScale']:
                 continue
             value = raw / (10 ** scale)
             unit = str(meta.get('unit', '')).lower().replace(' ', '').replace('·', '')
@@ -92,15 +94,15 @@ def normalize_device(device, specification, reports):
         # https://developer.tuya.com/en/docs/iot/1s?id=K9tp11c62qjq8
         if code == 'add_ele' and types.get(code) == 'sum' and scale == 3 and not unit:
             unit = 'kwh'
-        if unit not in ('kwh', 'wh') or value < 0 or code not in CUMULATIVE_CODES | {'add_ele'}:
+        if unit not in ENERGY_POLICY['kwhDivisors'] or value < 0 or code not in CUMULATIVE_CODES | {'add_ele'}:
             continue
         if types.get(code) == 'sum':
             if result['energyKind'] == 'unsupported':
                 result.update(energyKind='incremental', energyCode=code,
-                              incrementKwh=value / (1000 if unit == 'wh' else 1))
+                              incrementKwh=value / ENERGY_POLICY['kwhDivisors'][unit])
         elif types.get(code) == 'minux' or (code in CUMULATIVE_CODES and types.get(code) in (None, 'un_known')):
             result.update(energyKind='cumulative', energyCode=code, incrementKwh=None,
-                          counterKwh=value / (1000 if unit == 'wh' else 1))
+                          counterKwh=value / ENERGY_POLICY['kwhDivisors'][unit])
     return result
 
 

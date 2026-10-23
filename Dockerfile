@@ -22,6 +22,7 @@ COPY --from=build --chown=node:node /app/package.json ./
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --chown=node:node bridge ./bridge
+COPY --from=build --chown=node:node /app/shared/energy-policy.json ./shared/energy-policy.json
 RUN mkdir /data && chown node:node /data
 ENV NODE_ENV=production DATA_DIR=/data PYTHON_BIN=/opt/tuya/bin/python HOST=0.0.0.0 PORT=3000
 USER node

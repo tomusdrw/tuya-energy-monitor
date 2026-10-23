@@ -22,6 +22,7 @@ import type {
 } from '../shared/types';
 import { api, useApi } from './api';
 import { EstimationForm } from './EstimationForm';
+import { TuyaAiForm } from './TuyaAiForm';
 import { useI18n } from './i18n';
 import { messages } from './locales/pages';
 import {
@@ -270,7 +271,9 @@ export function HomePage({ id }: { id: string }) {
                         ? t('Estimate: no signal')
                         : t('Estimated kWh')
                       : d.energyKind === 'cumulative'
-                        ? t('kWh meter')
+                        ? d.measurementProvider === 'tuya_ai'
+                          ? t('Tuya.ai meter')
+                          : t('kWh meter · QR')
                         : d.energyKind === 'incremental'
                           ? d.reportingConnected
                             ? t('Incremental reports')
@@ -281,7 +284,9 @@ export function HomePage({ id }: { id: string }) {
                 <span className="tabular">
                   {energyNumber(d.stats)} <small>kWh</small>
                 </span>
-                <span className="subtle">{date(d.lastSeen)}</span>
+                <span className="subtle">
+                  {date(d.measurementProvider === 'tuya_ai' ? d.measurementAt : d.lastSeen)}
+                </span>
                 <ChevronRight size={17} />
               </a>
             ))}
@@ -356,7 +361,7 @@ export function DevicePage({ id }: { id: string }) {
           ) : (
             <>
               <strong>
-                {number(device.counterKwh)} <small>kWh</small>
+                {number(device.counterKwh, 3)} <small>kWh</small>
               </strong>
               <p>{t("The device's cumulative meter, not daily usage")}</p>
             </>
@@ -374,6 +379,23 @@ export function DevicePage({ id }: { id: string }) {
           </p>
         </div>
       </div>
+      {device.measurementProvider && (
+        <Notice tone={device.fresh ? undefined : 'warning'}>
+          {t('Measurement source: {source} · last reading: {date}', {
+            source: device.measurementProvider === 'tuya_ai' ? 'Tuya.ai' : 'QR',
+            date: date(device.measurementAt),
+          })}
+          {device.measurementProvider === 'tuya_ai' && (
+            <>
+              {' '}
+              {t(
+                'The first reading is a baseline. Usage is calculated from subsequent valid readings; earlier Smart Life history is not imported.',
+              )}
+            </>
+          )}
+          {device.measurementError && <> {t(device.measurementError)}</>}
+        </Notice>
+      )}
       {device.energyKind === 'incremental' && (
         <Notice tone={device.reportingConnected ? undefined : 'warning'}>
           {t(
@@ -599,6 +621,7 @@ export function AccountsPage() {
               <button className="button secondary full" onClick={() => open(a)}>
                 {t('Reconnect')}
               </button>
+              <TuyaAiForm account={a} onSaved={refresh} />
             </article>
           ))}
         </div>

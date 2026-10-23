@@ -1,6 +1,12 @@
 import type { Messages } from '../../shared/i18n';
 
 export const messages: Messages = {
+  'Tuya.ai meter': 'Licznik Tuya.ai',
+  'kWh meter · QR': 'Licznik kWh · QR',
+  'Measurement source: {source} · last reading: {date}':
+    'Źródło pomiaru: {source} · ostatni odczyt: {date}',
+  'The first reading is a baseline. Usage is calculated from subsequent valid readings; earlier Smart Life history is not imported.':
+    'Pierwszy odczyt jest punktem odniesienia. Zużycie obliczamy z kolejnych poprawnych odczytów; nie importujemy wcześniejszej historii Smart Life.',
   'Notification rules': 'Reguły powiadomień',
   'Settings for this apartment only': 'Ustawienia tylko dla tego mieszkania',
   'Daily energy threshold': 'Dzienny próg energii',

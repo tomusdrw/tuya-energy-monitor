@@ -1,0 +1,33 @@
+{
+  "success": true,
+  "result": {
+    "device_id": "heater-fixture",
+    "name": "Heater fixture",
+    "category": "qn",
+    "online": true,
+    "properties": {
+      "child_lock": false,
+      "countdown_left": 0,
+      "countdown_set": "cancel",
+      "cur_current": 1,
+      "cur_voltage": 2411,
+      "fault": 0,
+      "fault_detection": false,
+      "forward_energy_total": 370,
+      "light_mode": "low",
+      "mode": "smart",
+      "outlet_temp": 21,
+      "shake": false,
+      "switch": false,
+      "temp_current": 20,
+      "temp_current_f": 68,
+      "temp_set": 0,
+      "temp_set_f": 32,
+      "temp_unit_convert": "c",
+      "upper_temp": 110,
+      "upper_temp_f": 248,
+      "work_power": 0,
+      "work_state": "idle"
+    }
+  }
+}

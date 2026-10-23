@@ -11,6 +11,7 @@ import {
   TIMEZONE,
   usage,
   MAX_GAP,
+  measurementFresh,
 } from './energy.js';
 import { digest } from './crypto.js';
 import { energySource, currentHeatingState } from './estimation.js';
@@ -225,8 +226,10 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
   const unknown = monitored.filter(
     (d) => energySource(d) === 'estimated' && currentHeatingState(db, d, now) === 'unknown',
   );
-  const stale = monitored.filter(
-    (d) => !d.online || !d.present || now - (d.last_seen ?? 0) > MAX_GAP,
+  const stale = monitored.filter((d) =>
+    energySource(d) === 'measured'
+      ? !measurementFresh(d, now)
+      : !d.online || !d.present || now - (d.last_seen ?? 0) > MAX_GAP,
   );
   const health = accounts(db, now);
   enqueue(
@@ -253,7 +256,10 @@ export function evaluateNotifications(db: DatabaseSync, now: number): void {
       const accountHealth = health
         .map(
           (account) =>
-            `${account.label}: ${account.error ? localizeSystemMessage(account.error, language) : t(language, account.lastSync && now - account.lastSync <= MAX_GAP ? 'readings working' : 'readings stale')}`,
+            `${account.label}: ${account.error ? localizeSystemMessage(account.error, language) : t(language, account.lastSync && now - account.lastSync <= MAX_GAP ? 'readings working' : 'readings stale')}` +
+            (account.tuyaAi.configured
+              ? `; Tuya.ai: ${account.tuyaAi.error ? localizeSystemMessage(account.tuyaAi.error, language) : t(language, account.tuyaAi.healthy ? 'readings working' : 'readings stale')}`
+              : ''),
         )
         .join('\n');
       const deviceNames = (devices: Row[]) =>

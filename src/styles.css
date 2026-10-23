@@ -1815,3 +1815,24 @@ nav a.active {
 .stat.featured .energy-breakdown span:last-child {
   color: #e2e9ff;
 }
+.tuya-ai-form {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+.tuya-ai-heading,
+.tuya-ai-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.tuya-ai-heading {
+  justify-content: space-between;
+}
+.tuya-ai-heading h3 {
+  margin: 0;
+}
+.tuya-ai-heading small {
+  font-weight: normal;
+}
