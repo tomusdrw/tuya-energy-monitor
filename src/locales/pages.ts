@@ -41,6 +41,7 @@ export const messages: Messages = {
   'Excluded from apartment total': 'Poza sumą mieszkania',
   Online: 'Online',
   'Offline or stale readings': 'Offline lub nieaktualne odczyty',
+  'Inactive · offline or stale readings': 'Nieaktywne · offline lub nieaktualne odczyty',
   'Estimate: no signal': 'Estymacja: brak sygnału',
   'Estimated kWh': 'Estymacja kWh',
   'kWh meter': 'Licznik kWh',

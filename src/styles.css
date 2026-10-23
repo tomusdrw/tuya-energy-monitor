@@ -913,6 +913,23 @@ nav a.active {
 .device-row > svg {
   color: #a3afc2;
 }
+.device-row.inactive {
+  background: #f4f5f7;
+  color: #68707b;
+}
+.device-row.inactive:hover {
+  background: #eceef1;
+}
+.device-row.inactive .device-icon,
+.device-row.inactive .badge {
+  background: #e7e9ec;
+  color: inherit;
+}
+.device-row.inactive small,
+.device-row.inactive .subtle,
+.device-row.inactive > svg {
+  color: inherit;
+}
 .rules-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

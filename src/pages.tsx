@@ -166,6 +166,7 @@ export function HomePage({ id }: { id: string }) {
     { data: home, error, refresh } = useApi<HomeDetail>(`/homes/${id}?days=${days}`);
   if (error) return <Notice tone="error">{t(error)}</Notice>;
   if (!home) return <Loading />;
+  const devices = [...home.devices].sort((a, b) => Number(b.fresh) - Number(a.fresh));
   return (
     <>
       <a className="back-link" href="#homes">
@@ -236,8 +237,12 @@ export function HomePage({ id }: { id: string }) {
               <span>{t('Last reading')}</span>
               <span />
             </div>
-            {home.devices.map((d) => (
-              <a className="device-row" href={`#device/${d.id}`} key={d.id}>
+            {devices.map((d) => (
+              <a
+                className={`device-row${d.fresh ? '' : ' inactive'}`}
+                href={`#device/${d.id}`}
+                key={d.id}
+              >
                 <div className="device-name">
                   <span className={`device-icon ${d.energySource === 'measured' ? 'blue' : ''}`}>
                     {d.category === 'wk' ? <Thermometer size={19} /> : <Zap size={19} />}
@@ -245,11 +250,8 @@ export function HomePage({ id }: { id: string }) {
                   <div>
                     <strong>{d.name}</strong>
                     <small>
-                      {!d.included
-                        ? t('Excluded from apartment total')
-                        : d.fresh
-                          ? t('Online')
-                          : t('Offline or stale readings')}
+                      {d.fresh ? t('Online') : t('Inactive · offline or stale readings')}
+                      {!d.included && <> · {t('Excluded from apartment total')}</>}
                     </small>
                   </div>
                 </div>
