@@ -11,6 +11,7 @@ interface PushEnvironment {
   request: typeof api;
 }
 const receiverKey = 'tem-push-receiver';
+const logoutKey = 'tem-push-logout-pending';
 function applicationKey(value: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/')), (char) =>
     char.charCodeAt(0),
@@ -26,6 +27,22 @@ function matchingKey(subscription: PushSubscription, key: Uint8Array): boolean {
 }
 export function createPushClient(env: PushEnvironment) {
   let remembered: string | undefined;
+  let logoutPending = false;
+  const hasPendingLogout = () => {
+    try {
+      return env.storage?.getItem(logoutKey) === 'true' || logoutPending;
+    } catch {
+      return logoutPending;
+    }
+  };
+  const markLogout = (pending: boolean) => {
+    logoutPending = pending;
+    try {
+      env.storage?.setItem(logoutKey, String(pending));
+    } catch {
+      /* Keep the recovery intent in memory if persistence is unavailable. */
+    }
+  };
   let registration: Promise<ServiceWorkerRegistration> | undefined;
   let reconciling: Promise<PushReceiver | null> | undefined;
   const remember = (id: string) => {
@@ -51,7 +68,7 @@ export function createPushClient(env: PushEnvironment) {
     }));
   const subscription = async () => (await ready()).pushManager.getSubscription();
   const reconcile = () => {
-    if (support() !== 'supported') return Promise.resolve(null);
+    if (support() !== 'supported' || hasPendingLogout()) return Promise.resolve(null);
     return (reconciling ??= (async () => {
       const sub = await subscription();
       const result = await env.request<{ receiver: PushReceiver | null }>(
@@ -68,6 +85,7 @@ export function createPushClient(env: PushEnvironment) {
   return {
     support,
     reconcile,
+    hasPendingLogout,
     permission: env.permission,
     async enable(publicKey: string, preferences: PushPreferences): Promise<PushReceiver> {
       if (support() === 'insecure')
@@ -114,10 +132,13 @@ export function createPushClient(env: PushEnvironment) {
           .catch(() => {});
     },
     async logout(): Promise<void> {
+      // Keep this intent if authentication expired or the server cannot confirm revocation.
+      markLogout(true);
       let sub: PushSubscription | null = null;
       if (support() === 'supported') sub = await subscription().catch(() => null);
       await env.request('/auth/logout', 'POST', { receiverId: id(), endpoint: sub?.endpoint });
       await sub?.unsubscribe().catch(() => {});
+      markLogout(false);
     },
   };
 }

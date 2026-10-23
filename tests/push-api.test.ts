@@ -124,6 +124,18 @@ test('reconcile never enrolls or re-enables without consent; tests are rate limi
       ).statusCode,
       202,
     );
+    for (let attempt = 2; attempt <= 4; attempt++)
+      assert.equal(
+        (
+          await f.app.inject({
+            method: 'POST',
+            url: `/api/push/receivers/${r.id}/test`,
+            headers: f.headers,
+            payload: {},
+          })
+        ).statusCode,
+        attempt <= 3 ? 202 : 429,
+      );
     await f.app.inject({
       method: 'DELETE',
       url: `/api/push/receivers/${r.id}`,
@@ -159,5 +171,57 @@ test('changing owner password revokes durable push opt-in', async () => {
     assert.equal(db.prepare('SELECT state FROM push_receivers').get()?.state, 'disabled');
   } finally {
     await app.close();
+  }
+});
+
+test('an expired retired endpoint cannot disable its active replacement on stale reconciliation', async () => {
+  const f = await setup();
+  try {
+    const r = (await f.subscribe()).json().receiver;
+    const current = makeSubscription('rotated');
+    const reconcile = (subscription: unknown, receiverId?: string) =>
+      f.app.inject({
+        method: 'POST',
+        url: '/api/push/reconcile',
+        headers: f.headers,
+        payload: { subscription, receiverId },
+      });
+    assert.equal((await reconcile(current, r.id)).json().receiver.id, r.id);
+    const stale = await reconcile({ ...f.sub, expirationTime: 1 });
+    assert.equal(stale.statusCode, 200, stale.body);
+    assert.equal(stale.json().receiver.id, r.id);
+    assert.equal(stale.json().receiver.enabled, true);
+    assert.equal(f.db.prepare('SELECT generation FROM push_receivers').get()?.generation, 2);
+  } finally {
+    await f.app.close();
+  }
+});
+
+test('expired sessions retain opt-in, and reauthentication can finish explicit logout by endpoint', async () => {
+  const f = await setup();
+  try {
+    await f.subscribe();
+    f.db.exec('UPDATE sessions SET expires=0');
+    const logout = (headers: typeof f.headers) =>
+      f.app.inject({
+        method: 'POST',
+        url: '/api/auth/logout',
+        headers,
+        payload: { endpoint: f.sub.endpoint },
+      });
+    assert.equal((await logout(f.headers)).statusCode, 401);
+    assert.equal(f.db.prepare('SELECT state FROM push_receivers').get()?.state, 'active');
+    const login = await f.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      headers: { origin: pushConfig.origin },
+      payload: { password: pushConfig.password },
+    });
+    const headers = { ...f.headers, cookie: String(login.headers['set-cookie']).split(';')[0] };
+    assert.equal((await logout(headers)).statusCode, 200);
+    assert.equal(f.db.prepare('SELECT state FROM push_receivers').get()?.state, 'disabled');
+    assert.equal((await f.app.inject({ url: '/api/push/receivers', headers })).statusCode, 401);
+  } finally {
+    await f.app.close();
   }
 });

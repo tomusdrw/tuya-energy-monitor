@@ -170,6 +170,10 @@ export function openDatabase(path: string): DatabaseSync {
           state TEXT NOT NULL DEFAULT 'active', created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL, last_submitted_at INTEGER, error TEXT
         );
+        CREATE TABLE push_retired_endpoints (
+          endpoint_hash TEXT PRIMARY KEY,
+          receiver_id TEXT NOT NULL REFERENCES push_receivers(id)
+        );
         ALTER TABLE sessions ADD COLUMN receiver_id TEXT REFERENCES push_receivers(id);
         CREATE TABLE push_deliveries (
           event_id TEXT NOT NULL, receiver_id TEXT NOT NULL REFERENCES push_receivers(id),

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { createPushClient } from '../src/push.js';
+import { api } from '../src/api.js';
 
 function browser(permission: NotificationPermission = 'default') {
   let prompts = 0,
@@ -113,6 +114,47 @@ test('logout sends endpoint identity before unsubscribing even if local storage 
   await f.client.logout();
   assert.equal(f.calls.at(-1)?.url, '/auth/logout');
   assert.equal(f.calls.at(-1)?.body.endpoint, 'https://fcm.googleapis.com/wp/x');
+  assert.equal(f.counters().subscribed, false);
+});
+
+test('expired-session logout preserves revocation intent through reauthentication and reload', async (t) => {
+  const f = browser('granted');
+  f.setSubscribed();
+  const storage = new Map<string, string>();
+  f.env.storage = {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value),
+  };
+  const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const events = new EventTarget();
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: events });
+  t.after(() => {
+    if (windowDescriptor) Object.defineProperty(globalThis, 'window', windowDescriptor);
+    else Reflect.deleteProperty(globalThis, 'window');
+  });
+  let expired = false;
+  events.addEventListener('session-expired', () => {
+    expired = true;
+  });
+  let loggedIn = false;
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
+    loggedIn
+      ? new Response('{"ok":true}')
+      : new Response('{"error":"Authentication required."}', { status: 401 }),
+  );
+  f.env.request = api;
+  await assert.rejects(() => f.client.logout(), /Authentication required/);
+  assert.equal(expired, true);
+  assert.equal(f.client.hasPendingLogout(), true);
+  assert.equal(f.counters().subscribed, true);
+  const reloaded = createPushClient(f.env);
+  assert.equal(reloaded.hasPendingLogout(), true);
+  await reloaded.reconcile();
+  assert.equal(fetchMock.mock.callCount(), 1, 'pending logout must not silently reconcile');
+  loggedIn = true;
+  await reloaded.logout();
+  assert.equal(reloaded.hasPendingLogout(), false);
+  assert.equal(createPushClient(f.env).hasPendingLogout(), false);
   assert.equal(f.counters().subscribed, false);
 });
 

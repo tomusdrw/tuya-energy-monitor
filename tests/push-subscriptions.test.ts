@@ -128,6 +128,39 @@ test('strict subscription validation rejects hostile destinations, invalid keys 
   }
 });
 
+test('delayed reconciliation cannot replace a rotated endpoint, even after the database reopens', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'push-rotation-'));
+  const file = join(dir, 'db.sqlite');
+  let db = openDatabase(file);
+  try {
+    const old = subscription('old');
+    const current = subscription('current');
+    const receiver = saveSubscription(db, config, { subscription: old, enable: true }, 1);
+    saveSubscription(
+      db,
+      config,
+      { subscription: current, receiverId: receiver.id, enable: false },
+      2,
+    );
+    db.close();
+    db = openDatabase(file);
+    const result = saveSubscription(
+      db,
+      config,
+      { subscription: old, receiverId: receiver.id, enable: false },
+      3,
+    );
+    assert.equal(result.id, receiver.id);
+    const row = db.prepare('SELECT * FROM push_receivers WHERE id=?').get(receiver.id) as any;
+    assert.equal((decrypt(row.secret, config.encryptionKey) as any).endpoint, current.endpoint);
+    assert.equal(row.generation, 2);
+    assert.equal(listReceivers(db).length, 1);
+  } finally {
+    db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('schema v9 preserves old notification retry data and allows receiver-session association', () => {
   const dir = mkdtempSync(join(tmpdir(), 'push-migration-'));
   const file = join(dir, 'db.sqlite');

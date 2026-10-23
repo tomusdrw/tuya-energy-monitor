@@ -444,6 +444,11 @@ background settings, Focus modes and connectivity. Denied permissions must be
 changed in browser/system settings. Explicit logout disables this receiver;
 natural login-session expiry preserves opt-in. Changing the owner password
 revokes all receivers. Rotating VAPID keys requires enabling notifications again.
+If a logout request finds that the session has already expired, the sign-in screen
+keeps a warning that notifications may still arrive. Sign in there to finish
+revoking the receiver and signing out. Failed requests never count as completed
+revocation. Retired endpoint hashes prevent delayed requests from another tab
+from undoing subscription rotation.
 
 Operational alerts use existing observations, without extra Tuya requests. A loss
 must persist for 15 minutes after detection, and recovery for 5 minutes. These
@@ -456,6 +461,8 @@ Device transitions confirmed together are grouped per apartment. Account outages
 suppress new corresponding device-loss cascades. Tuya.ai account connectivity uses
 its account-list request, independently of individual offline devices; an idle
 integration with no eligible devices does not count as a connection failure.
+Configured accounts can report persistent connection failures before their first
+successful read, including after reconnection or credential changes.
 
 Operational events stay in history and go only to opted-in push receivers, not
 email. Outbox rows and episode state survive restarts. Fully superseded pending
@@ -549,6 +556,11 @@ Schema v8 adds current humidity, a dedicated climate timestamp and
 `climate_observations` history. Existing temperature values are not assigned a
 fresh timestamp or converted into historical samples during migration; new
 collection supplies the first climate summary.
+
+Schema v9 adds encrypted notification receivers, retired endpoint hashes,
+session associations, the push outbox, monitoring availability episodes and
+independent Tuya.ai connection observations. Existing email retry payloads and
+energy/climate history are preserved.
 
 Run one process per database. Raw readings, climate/heating observations and intervals are retained; size grows
 with time and the number of devices. Schedule volume backups and monitor disk

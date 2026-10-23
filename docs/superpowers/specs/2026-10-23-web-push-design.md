@@ -1,6 +1,6 @@
 # Per-device Web Push notifications
 
-Status: approved by the user on 2026-10-23; implementation in progress.
+Status: approved by the user and implemented on 2026-10-23. Validation and deployment limits are recorded in the implementation plan.
 
 ## Intent and agreed scope
 

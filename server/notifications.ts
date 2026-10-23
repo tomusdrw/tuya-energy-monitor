@@ -307,8 +307,13 @@ export async function deliverPending(
       "SELECT * FROM notifications WHERE status IN ('pending','retry') AND (next_attempt IS NULL OR next_attempt<=?) ORDER BY created_at LIMIT 20",
     )
     .all(now) as Row[];
-  for (const event of pending) {
+  for (const queued of pending) {
     if (!emailEnabled(db)) break;
+    // A preceding network await may have allowed the owner to cancel this batch.
+    const event = db
+      .prepare("SELECT * FROM notifications WHERE id=? AND status IN ('pending','retry')")
+      .get(queued.id) as Row | undefined;
+    if (!event) continue;
     if (event.first_attempt !== null && now - event.first_attempt >= 23 * 3600000) {
       db.prepare("UPDATE notifications SET status='uncertain',error=? WHERE id=?").run(
         'The safe retry window expired. Check delivery in Resend.',
@@ -357,13 +362,17 @@ export async function deliverPending(
         response.status < 500 &&
         ![408, 409, 429].includes(response.status)
       ) {
-        db.prepare("UPDATE notifications SET status='failed',error=? WHERE id=?").run(
+        db.prepare(
+          "UPDATE notifications SET status='failed',error=? WHERE id=? AND status IN ('pending','retry')",
+        ).run(
           `Resend rejected the message (HTTP ${response.status}). Check the sender and API key configuration.`,
           event.id,
         );
       } else throw new Error('Transient delivery error');
     } catch {
-      db.prepare("UPDATE notifications SET status='retry',error=?,next_attempt=? WHERE id=?").run(
+      db.prepare(
+        "UPDATE notifications SET status='retry',error=?,next_attempt=? WHERE id=? AND status IN ('pending','retry')",
+      ).run(
         'Delivery was not confirmed. We will retry with the same identifier.',
         now + Math.min(3600000, 300000 * 2 ** Math.min(event.attempts, 4)),
         event.id,

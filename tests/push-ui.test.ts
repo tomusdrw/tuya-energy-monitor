@@ -6,6 +6,7 @@ import { LanguageProvider } from '../src/i18n.js';
 import { PushPreferencesForm } from '../src/PushSettings.js';
 import { defaultPushKinds } from '../shared/push.js';
 import { AlertList } from '../src/components.js';
+import { Login } from '../src/App.js';
 
 test('receiver form localizes all categories and exposes the initial opt-in selection', () => {
   for (const language of ['en', 'pl'] as const) {
@@ -55,5 +56,30 @@ test('history labels push acceptance separately from skipped email delivery in b
     );
     assert.ok(html.includes(language === 'pl' ? 'Email: pominięto' : 'Email: not requested'));
     assert.ok(html.includes(language === 'pl' ? 'Push: przekazano 1' : 'Push: submitted 1'));
+  }
+});
+
+test('expired-session logout keeps the revocation warning and recovery action on the login screen', () => {
+  for (const language of ['en', 'pl'] as const) {
+    const html = renderToStaticMarkup(
+      createElement(LanguageProvider, {
+        initialLanguage: language,
+        children: createElement(Login, { pendingLogout: true, onLogin: async () => {} }),
+      }),
+    );
+    assert.ok(
+      html.includes(
+        language === 'pl'
+          ? 'Powiadomienia mogą nadal przychodzić.'
+          : 'Notifications may still arrive.',
+      ),
+    );
+    assert.ok(
+      html.includes(
+        language === 'pl'
+          ? 'Zaloguj się i wyłącz powiadomienia'
+          : 'Sign in and disable notifications',
+      ),
+    );
   }
 });

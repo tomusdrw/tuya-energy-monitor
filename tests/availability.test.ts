@@ -174,3 +174,44 @@ test('Tuya.ai device errors do not masquerade as connection failure and idle lan
     f.db.close();
   }
 });
+
+test('initially failing AI configuration and QR reconnection start a new connection grace period', () => {
+  const f = fixture();
+  try {
+    // The inactive AI lane already has persisted state; no successful list call follows setup.
+    f.db.exec(
+      "UPDATE accounts SET ai_secret='configured',ai_revision=1,ai_connectivity_active=1,ai_connectivity_ok=0",
+    );
+    f.db.prepare('UPDATE accounts SET ai_connectivity_at=?').run(f.now + minute);
+    f.db.exec("INSERT INTO metadata(key,value) VALUES('connection-revision/a','reconnected')");
+    f.tick(1, [], true);
+    f.tick(15, [], true);
+    assert.equal(f.events('account_problem').length, 0);
+    f.tick(16, [], true);
+    f.tick(40, [], true);
+    assert.equal(f.events('account_problem').length, 2);
+    assert.equal(f.events('account_restored').length, 0);
+    assert.equal(f.events('readings_lost').length, 0);
+  } finally {
+    f.db.close();
+  }
+});
+
+test('changing a device source still requires a healthy baseline for that source', () => {
+  const f = fixture();
+  try {
+    f.tick(1);
+    f.db.exec("UPDATE devices SET energy_code='new_total'");
+    f.tick(10);
+    f.tick(30);
+    assert.equal(f.events('readings_lost').length, 0);
+    f.tick(31, ['one']);
+    f.tick(32);
+    f.tick(47);
+    assert.equal(f.events('readings_lost').length, 1);
+    assert.match(f.events('readings_lost')[0].body, /one/);
+    assert.doesNotMatch(f.events('readings_lost')[0].body, /two/);
+  } finally {
+    f.db.close();
+  }
+});

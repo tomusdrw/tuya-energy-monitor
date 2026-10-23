@@ -179,3 +179,29 @@ test('transport rejects local, mapped, reserved and non-global DNS answers', () 
   for (const ip of ['8.8.8.8', '1.1.1.1', '2606:4700::1111'])
     assert.equal(isPublicAddress(ip), true, ip);
 });
+
+test('email toggles during an in-flight request cannot revive cancelled messages', async () => {
+  for (const accepted of [true, false]) {
+    const f = pushFixture();
+    try {
+      event(f, 'first');
+      event(f, 'second');
+      let calls = 0;
+      const transport: typeof fetch = async () => {
+        calls++;
+        setEmailEnabled(f.db, false);
+        setEmailEnabled(f.db, true);
+        return accepted ? new Response('{"id":"accepted"}') : new Response('', { status: 503 });
+      };
+      await deliverPending(f.db, pushConfig, f.now, transport);
+      assert.equal(calls, 1, 'cancelled second message must not be sent');
+      const records = f.db.prepare('SELECT id,status FROM notifications ORDER BY id').all();
+      assert.equal(records[0].status, accepted ? 'sent' : 'skipped');
+      assert.equal(records[1].status, 'skipped');
+      await deliverPending(f.db, pushConfig, f.now + 3600000, transport);
+      assert.equal(calls, 1, 'a failed cancelled request must not be retried after reenabling');
+    } finally {
+      f.db.close();
+    }
+  }
+});

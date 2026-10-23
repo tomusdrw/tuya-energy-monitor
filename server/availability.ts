@@ -34,6 +34,7 @@ function observe(
     eligible: boolean;
     healthy: boolean;
     historical: boolean;
+    requiresHealthyBaseline?: boolean;
     observation: number | null;
     suppressed?: boolean;
   },
@@ -68,7 +69,9 @@ function observe(
     state.lossSince = null;
     state.recoverySince = null;
   } else {
-    if (input.healthy) state.seen = true;
+    // A configured connection must report persistent setup failures, even before its first success.
+    // Device source changes still need a known healthy observation before detecting a loss.
+    if (input.healthy || input.requiresHealthyBaseline === false) state.seen = true;
     if (state.lost) {
       if (input.healthy && input.observation !== null && input.observation >= boot) {
         state.recoverySince ??= now;
@@ -180,6 +183,7 @@ export function evaluateAvailability(db: DatabaseSync, now: number, startedAt: n
             fingerprint: String(ai ? `${account.ai_revision}/${active}` : revision),
             eligible: active,
             historical: true,
+            requiresHealthyBaseline: false,
             healthy,
             observation: observed,
           },

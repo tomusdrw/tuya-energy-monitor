@@ -13,6 +13,8 @@
 !shared/**
 !assets
 !assets/**
+!public
+!public/**
 !scripts
 !scripts/**
 !bridge

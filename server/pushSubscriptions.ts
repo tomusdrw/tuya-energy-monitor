@@ -105,9 +105,13 @@ export function listReceivers(db: DatabaseSync): PushReceiver[] {
   );
 }
 export function findReceiver(db: DatabaseSync, endpoint: string): PushReceiver | null {
+  const hash = digest(validateEndpoint(endpoint));
   const row = db
-    .prepare('SELECT * FROM push_receivers WHERE endpoint_hash=?')
-    .get(digest(validateEndpoint(endpoint))) as Row | undefined;
+    .prepare(
+      `SELECT * FROM push_receivers WHERE endpoint_hash=? OR id=(
+      SELECT receiver_id FROM push_retired_endpoints WHERE endpoint_hash=?)`,
+    )
+    .get(hash, hash) as Row | undefined;
   return row ? view(row) : null;
 }
 export function saveSubscription(
@@ -117,14 +121,23 @@ export function saveSubscription(
   now: number,
 ): PushReceiver {
   const body = inputSchema.parse(input);
-  if (body.subscription.expirationTime != null && body.subscription.expirationTime <= now)
-    throw new PushInputError('The push subscription expired. Enable notifications again.');
   return transaction(db, () => {
     const hash = digest(body.subscription.endpoint);
+    const retired = db
+      .prepare(
+        `SELECT r.* FROM push_receivers r JOIN push_retired_endpoints e
+      ON e.receiver_id=r.id WHERE e.endpoint_hash=?`,
+      )
+      .get(hash) as Row | undefined;
+    // A delayed request from another tab must never roll endpoint rotation backwards.
+    if (retired && !body.enable) return view(retired);
+    if (body.subscription.expirationTime != null && body.subscription.expirationTime <= now)
+      throw new PushInputError('The push subscription expired. Enable notifications again.');
     const existing = db.prepare('SELECT * FROM push_receivers WHERE endpoint_hash=?').get(hash) as
       Row | undefined;
     const prior =
       existing ??
+      retired ??
       (body.receiverId
         ? (db.prepare('SELECT * FROM push_receivers WHERE id=?').get(body.receiverId) as
             Row | undefined)
@@ -149,6 +162,12 @@ export function saveSubscription(
             prior.vapid_key !== digest(config.vapidPublicKey ?? ''),
         )
       : 1;
+    if (prior && prior.endpoint_hash !== hash)
+      db.prepare(
+        'INSERT OR REPLACE INTO push_retired_endpoints(endpoint_hash,receiver_id) VALUES(?,?)',
+      ).run(prior.endpoint_hash, prior.id);
+    // Explicit enrollment is allowed to use an endpoint again; passive reconciliation is not.
+    db.prepare('DELETE FROM push_retired_endpoints WHERE endpoint_hash=?').run(hash);
     db.prepare(
       `INSERT INTO push_receivers(id,endpoint_hash,secret,vapid_key,name,language,kinds,state,created_at,updated_at)
       VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET endpoint_hash=excluded.endpoint_hash,

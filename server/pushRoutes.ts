@@ -72,6 +72,14 @@ export function registerPushRoutes(
       findReceiver(db, body.subscription.endpoint) ??
       listReceivers(db).find((r) => r.id === remembered);
     if (!existing) return { receiver: null };
+    if (
+      db
+        .prepare('SELECT 1 FROM push_retired_endpoints WHERE endpoint_hash=?')
+        .get(digest(body.subscription.endpoint))
+    ) {
+      associate(request, existing.id);
+      return { receiver: existing };
+    }
     // Invalid/changed VAPID identity requires the browser's explicit resubscribe flow.
     const storedKey = db
       .prepare('SELECT vapid_key FROM push_receivers WHERE id=?')
