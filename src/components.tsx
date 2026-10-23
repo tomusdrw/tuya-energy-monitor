@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ArrowRight,
   AlertTriangle,
@@ -29,7 +29,7 @@ export function Brand() {
 export function Badge({ children, tone = 'muted' }: { children: ReactNode; tone?: string }) {
   return (
     <span className={`badge ${tone}`}>
-      <i />
+      <i aria-hidden="true" />
       {children}
     </span>
   );
@@ -144,7 +144,7 @@ export function Coverage({ stats }: { stats: EnergyStats }) {
 export function Range({ days, setDays }: { days: number; setDays: (days: number) => void }) {
   const { t } = useI18n(componentMessages);
   return (
-    <div className="segmented" aria-label={t('History range')}>
+    <div className="segmented" role="group" aria-label={t('History range')}>
       {[7, 14, 30].map((n) => (
         <button
           key={n}
@@ -161,7 +161,18 @@ export function Range({ days, setDays }: { days: number; setDays: (days: number)
 
 export function EnergyChart({ points }: { points: HistoryPoint[] }) {
   const { t, number, percent, day, energyNumber } = useI18n(componentMessages);
-  if (!points.some((p) => p.kwh !== null))
+  const container = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(720);
+  const hasData = points.some((p) => p.kwh !== null);
+  useEffect(() => {
+    if (!container.current) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setWidth(Math.max(240, Math.min(960, entry.contentRect.width)));
+    });
+    observer.observe(container.current);
+    return () => observer.disconnect();
+  }, [hasData]);
+  if (!hasData)
     return (
       <Empty title={t('Your history starts here')}>
         {t(
@@ -170,13 +181,13 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
       </Empty>
     );
   const max = Math.max(1, ...points.map((p) => p.kwh ?? 0));
-  const width = 720,
-    height = 220,
+  const height = 220,
     pad = 45,
     chartHeight = 155,
-    slot = (width - pad - 15) / points.length;
+    slot = (width - pad - 15) / points.length,
+    labelStep = Math.ceil(points.length / Math.max(1, Math.floor((width - pad) / 65)));
   return (
-    <div className="energy-chart">
+    <div className="energy-chart" ref={container}>
       <svg
         viewBox={`0 0 ${width} ${height}`}
         role="img"
@@ -263,7 +274,8 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
                   )}
                 </>
               )}
-              {(points.length <= 14 || i % 3 === 0 || i === points.length - 1) && (
+              {((i % labelStep === 0 && i < points.length - labelStep) ||
+                i === points.length - 1) && (
                 <text
                   x={pad + i * slot + slot / 2}
                   y={202}
@@ -296,6 +308,31 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
         </span>
         <span>{t('Lighter bar = partial data')}</span>
       </div>
+      <details className="history-details">
+        <summary>{t('View daily readings')}</summary>
+        <dl className="history-values">
+          {points.map((point) => (
+            <div key={point.day}>
+              <dt>
+                <time dateTime={point.day}>{day(point.day)}</time>
+              </dt>
+              <dd>
+                <strong>{point.kwh === null ? t('No data') : `${energyNumber(point)} kWh`}</strong>
+                <span>{t('Measured: {energy} kWh', { energy: number(point.measuredKwh) })}</span>
+                {point.powerKwh !== null && (
+                  <span>{t('From power: {energy} kWh', { energy: number(point.powerKwh) })}</span>
+                )}
+                {point.estimatedKwh !== null && (
+                  <span>
+                    {t('Estimated: {energy} kWh', { energy: number(point.estimatedKwh) })}
+                  </span>
+                )}
+                <span>{t('Time coverage: {coverage}', { coverage: percent(point.coverage) })}</span>
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </details>
     </div>
   );
 }

@@ -54,7 +54,7 @@ function DeviceRow({ device: d, onSaved }: { device: DeviceView; onSaved: OnSave
             </small>
           </div>
         </div>
-        <span>
+        <span className="device-source">
           <Badge
             tone={
               d.energySource === 'measured'
@@ -81,10 +81,14 @@ function DeviceRow({ device: d, onSaved }: { device: DeviceView; onSaved: OnSave
                     : t('No energy data')}
           </Badge>
         </span>
-        <span className="tabular">
-          {energyNumber(d.stats)} <small>kWh</small>
+        <span className="device-energy tabular">
+          <span className="mobile-field-label">{t('Today')}</span>
+          <span>
+            {energyNumber(d.stats)} <small>kWh</small>
+          </span>
         </span>
-        <span className="subtle">
+        <span className="device-reading subtle">
+          <span className="mobile-field-label">{t('Last reading')}</span>
           {date(d.measurementProvider === 'tuya_ai' ? d.measurementAt : d.lastSeen)}
         </span>
         <ChevronRight size={17} />
