@@ -138,6 +138,9 @@ history remains in SQLite `heating_observations` and `intervals`.
   not that day's usage. History starts when two valid readings are available.
 - Known cumulative consumption codes and incremental fields marked `sum` by Tuya
   are supported, with validated units/scales. Energy returned to the grid is excluded.
+  Some single-phase meters omit the unit for the standard `add_ele` field. With an
+  explicit `sum` report type and scale 3, its documented kWh unit is used (184 means
+  0.184 kWh per report). Other missing units and contradictory units remain unsupported.
   Incremental consumption comes only from live MQTT reports, never from polled status.
   Each account has a persistent Python worker; polling and MQTT share one serialized
   API client so they cannot race to refresh the same credentials.
@@ -172,6 +175,32 @@ history remains in SQLite `heating_observations` and `intervals`.
   Anomalies require adequate history for the current set of measured and configured estimated devices.
 - Past Smart Life app statistics and thermostat-specific monthly fields are
   not imported. No tariff or billing calculation is performed.
+- A report-type entry alone does not supply an energy reading. Some heaters advertise
+  `forward_energy_total` in report configuration but omit both its value and schema
+  from the sharing API, even while Smart Life displays daily/monthly/yearly energy
+  statistics. Their `work_power` is exposed as `powerW` in the monitoring API; it is
+  not a kWh counter. Runtime estimation can use `work_state` and a confirmed fixed
+  heating power, but power readings alone are not currently integrated into energy history.
+  Tuya provides separate [device statistics APIs](https://developer.tuya.com/en/docs/cloud/device-data-statistic?id=Ka7g7nvnad1rm)
+  and [end-user hourly statistics APIs](https://tuya.ai/developer/docs#statistics).
+  The existing sharing session was rejected by these APIs in live diagnostics;
+  they require separate authentication. An authenticated Tuya.ai diagnostic confirmed
+  that the Eco Heater (without a display), product `csibqkjs0mijthmw`, exposes
+  `forward_energy_total` as DP 101 with scale 3 and unit `kW·h`: raw 370 is a
+  **cumulative counter of 0.370 kWh**, not a daily consumption reading. Its statistics
+  use `MINUX`. A successful hourly query for 2026-10-22 returned 24 zero values,
+  despite Smart Life showing consumption for that day and a previously observed
+  DP 101 value of 268 (0.268 kWh). The reason for this discrepancy is unresolved;
+  those hourly zeros are not validated consumption data. The confirmed counter
+  is available from `GET /v1.0/end-user/devices/{device_id}/detail` in
+  `properties.forward_energy_total`, with its scale and unit supplied by
+  `GET /v1.0/end-user/devices/{device_id}/model`. Consumption can be calculated
+  from consecutive valid counter readings; the first reading is only a baseline.
+  The monitor does not yet poll this separate API or ingest cumulative
+  MQTT reports. Statistics requests must be paced, deduplicated and retried with
+  backoff on Tuya error 1199 (rate limiting). Units and time boundaries must be
+  verified before importing statistics. Unknown raw DP IDs are not treated as
+  energy by guessing their meaning or scale.
 
 The stream uses the pinned [Tuya sharing SDK](https://github.com/tuya/tuya-device-sharing-sdk/tree/0.2.15)
 and its local DP conversion strategies. Report identity and timestamps follow

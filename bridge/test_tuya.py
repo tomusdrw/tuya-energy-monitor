@@ -24,6 +24,42 @@ class DeviceTests(unittest.TestCase):
         self.assertIsNone(result['counterKwh'])
         self.assertEqual(result['energyKind'], 'incremental')
 
+    def test_standard_add_ele_sum_uses_kwh_when_cloud_omits_unit(self):
+        # Observed on the new single-phase meters: sum, scale 3, no unit.
+        for unit in (None, '', ' '):
+            with self.subTest(unit=unit):
+                device, spec, reports = self.device('add_ele', 184, 'sum', unit, 3)
+                if unit is None:
+                    del spec['status'][0]['values']['unit']
+                result = normalize_device(device, spec, reports)
+                self.assertEqual(result['energyKind'], 'incremental')
+                self.assertEqual(result['energyCode'], 'add_ele')
+                self.assertAlmostEqual(result['incrementKwh'], 0.184)
+                self.assertIsNone(result['counterKwh'])
+
+    def test_missing_unit_fallback_requires_standard_increment_metadata(self):
+        for code, report, scale, unit in [
+                ('add_ele', 'un_known', 3, ''), ('add_ele', 'minux', 3, ''),
+                ('add_ele', 'sum', 2, ''), ('add_ele', 'sum', None, ''),
+                ('add_ele', 'sum', 3, 'W'), ('total_forward_energy', 'minux', 3, ''),
+                ('reverse_energy_total', 'sum', 3, ''), ('mystery', 'sum', 3, '')]:
+            with self.subTest(code=code, report=report, scale=scale, unit=unit):
+                result = normalize_device(*self.device(code, 184, report, unit, scale))
+                self.assertEqual(result['energyKind'], 'unsupported')
+                self.assertIsNone(result['incrementKwh'])
+                self.assertIsNone(result['counterKwh'])
+
+    def test_heater_work_power_is_watts_not_a_reported_energy_counter(self):
+        for raw in (0, 800):
+            device, spec, reports = self.device('work_power', raw, 'un_known', 'w', 0)
+            device['category'] = 'qn'
+            # The heater advertises this report type but exposes no value or schema.
+            reports.append({'dp_code': 'forward_energy_total', 'report_type': 'minux'})
+            result = normalize_device(device, spec, reports)
+            self.assertEqual(result['powerW'], raw)
+            self.assertEqual(result['energyKind'], 'unsupported')
+            self.assertIsNone(result['counterKwh'])
+
     def test_unit_and_counter_semantics_must_be_known(self):
         for args in [self.device(unit=''), self.device('mystery', report='un_known'), self.device(raw=-1)]:
             self.assertIsNone(normalize_device(*args)['counterKwh'])

@@ -85,8 +85,13 @@ def normalize_device(device, specification, reports):
             continue
         if code == 'temp_current' and unit in ('℃', '°c', 'c'):
             result['temperature'] = value
-        if code in ('cur_power', 'power') and unit in ('w', 'kw'):
+        if code in ('cur_power', 'power', 'work_power') and unit in ('w', 'kw'):
             result['powerW'] = value * (1000 if unit == 'kw' else 1)
+        # Some sharing schemas omit the unit for standard add_ele increments.
+        # Tuya defines this scale-3 DP in kWh; require the explicit sum report type.
+        # https://developer.tuya.com/en/docs/iot/1s?id=K9tp11c62qjq8
+        if code == 'add_ele' and types.get(code) == 'sum' and scale == 3 and not unit:
+            unit = 'kwh'
         if unit not in ('kwh', 'wh') or value < 0 or code not in CUMULATIVE_CODES | {'add_ele'}:
             continue
         if types.get(code) == 'sum':
