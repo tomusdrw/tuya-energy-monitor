@@ -1,6 +1,10 @@
 import type { Messages } from '../../shared/i18n';
 
 export const messages: Messages = {
+  'Switch apartment': 'Przełącz mieszkanie',
+  'Previous apartment': 'Poprzednie mieszkanie',
+  'Next apartment': 'Następne mieszkanie',
+  '{current} of {total}': '{current} z {total}',
   'Climate history': 'Historia warunków',
   'Current conditions': 'Aktualne warunki',
   'Use on your phone': 'Korzystaj na telefonie',

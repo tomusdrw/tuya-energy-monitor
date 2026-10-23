@@ -270,13 +270,28 @@ function Shell({ onLogout }: { onLogout: () => void }) {
   const overview = useApi<Overview>(`/overview?days=${days}`),
     settings = useApi<SettingsView>('/settings');
   useEffect(() => {
-    const change = () => {
-      setRoute(location.hash.slice(1));
+    const change = (event: HashChangeEvent) => {
+      const nextRoute = location.hash.slice(1);
+      const switcher =
+        nextRoute.startsWith('home/') && new URL(event.oldURL).hash.startsWith('#home/')
+          ? document.activeElement?.closest('.home-switcher')
+          : null;
+      setRoute(nextRoute);
       setMessage('');
       window.scrollTo(0, 0);
-      requestAnimationFrame(() =>
-        document.getElementById('main-content')?.focus({ preventScroll: true }),
-      );
+      requestAnimationFrame(() => {
+        if (switcher?.isConnected) {
+          // Keep keyboard navigation in the switcher; a boundary arrow becomes disabled.
+          if (
+            !switcher.contains(document.activeElement) ||
+            document.activeElement?.matches(':disabled')
+          ) {
+            switcher.querySelector('select')?.focus({ preventScroll: true });
+          }
+        } else {
+          document.getElementById('main-content')?.focus({ preventScroll: true });
+        }
+      });
     };
     window.addEventListener('hashchange', change);
     return () => window.removeEventListener('hashchange', change);
@@ -427,7 +442,11 @@ function Shell({ onLogout }: { onLogout: () => void }) {
             </>
           )}
           {route.startsWith('home/') && (
-            <HomePage id={route.slice(5)} onMonitoringChanged={overview.refresh} />
+            <HomePage
+              id={route.slice(5)}
+              homes={overview.data?.homes ?? []}
+              onMonitoringChanged={overview.refresh}
+            />
           )}
           {route.startsWith('device/') && <DevicePage id={route.slice(7)} />}
           {route === 'accounts' && <AccountsPage />}

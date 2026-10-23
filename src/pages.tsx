@@ -14,6 +14,7 @@ import type {
   AccountView,
   DeviceDetail,
   HomeDetail,
+  HomeView,
   NotificationView,
   Rules,
   SettingsView,
@@ -22,6 +23,7 @@ import { api, useApi } from './api';
 import { EstimationForm } from './EstimationForm';
 import { TuyaAiForm } from './TuyaAiForm';
 import { DeviceList } from './DeviceList';
+import { HomeSwitcher } from './HomeSwitcher';
 import { ClimateHistory, ClimateSummaryCards, DeviceClimate } from './Climate';
 import { useI18n } from './i18n';
 import { messages } from './locales/pages';
@@ -167,16 +169,18 @@ function RulesForm({ home, onSaved }: { home: HomeDetail; onSaved: () => void })
 
 export function HomePage({
   id,
+  homes,
   onMonitoringChanged,
 }: {
   id: string;
+  homes: HomeView[];
   onMonitoringChanged?: () => void;
 }) {
   const { t, number, percent, energyNumber } = useI18n(messages);
   const [days, setDays] = useState(14),
-    { data: home, error, refresh } = useApi<HomeDetail>(`/homes/${id}?days=${days}`);
-  if (error) return <Notice tone="error">{t(error)}</Notice>;
-  if (!home) return <Loading />;
+    { data, error, refresh } = useApi<HomeDetail>(`/homes/${id}?days=${days}`);
+  const home = data?.id === id ? data : null;
+  const selectedHome = home ?? homes.find((item) => item.id === id);
   return (
     <>
       <a className="back-link" href="#homes">
@@ -184,78 +188,97 @@ export function HomePage({
         {t('Apartments')}
       </a>
       <PageTitle
-        title={home.name}
-        subtitle={t('{account} · Devices: {count}', {
-          account: home.accountLabel,
-          count: number(home.deviceCount, 0),
-        })}
+        title={selectedHome?.name ?? t('Apartments')}
+        titleControl={
+          homes.length > 1 && homes.some((item) => item.id === id) ? (
+            <HomeSwitcher id={id} homes={homes} />
+          ) : undefined
+        }
+        subtitle={
+          selectedHome
+            ? t('{account} · Devices: {count}', {
+                account: selectedHome.accountLabel,
+                count: number(selectedHome.deviceCount, 0),
+              })
+            : ''
+        }
       >
-        <Badge tone={home.stats.complete ? 'success' : 'warning'}>
-          {home.stats.complete ? t('Current readings') : t('Incomplete readings')}
-        </Badge>
+        {home && !error && (
+          <Badge tone={home.stats.complete ? 'success' : 'warning'}>
+            {home.stats.complete ? t('Current readings') : t('Incomplete readings')}
+          </Badge>
+        )}
       </PageTitle>
-      <div className="stats-grid three">
-        <div className="stat featured">
-          <span>{t('Observed today')}</span>
-          <strong>
-            {energyNumber(home.stats)} <small>kWh</small>
-          </strong>
-          <EnergyBreakdown stats={home.stats} />
-          <Coverage stats={home.stats} />
-        </div>
-        <div className="stat">
-          <span>{t('Daily threshold')}</span>
-          <strong>
-            {number(home.rules.dailyLimit, 1)} <small>kWh</small>
-          </strong>
-          <p>
-            {home.rules.dailyLimit === null
-              ? t('Set a threshold below')
-              : t('Individual apartment limit')}
-          </p>
-        </div>
-        <div className="stat">
-          <span>{t('Reading coverage')}</span>
-          <strong>{percent(home.stats.coverage)}</strong>
-          <p>{t('Since midnight, for selected devices')}</p>
-        </div>
-      </div>
-      {!home.stats.complete && (
-        <Notice tone="warning">
-          {t(
-            'This total is partial. It includes meter readings, consumption calculated from power and enabled estimates. Reading gaps and devices without an energy source remain missing data.',
+      {error ? (
+        <Notice tone="error">{t(error)}</Notice>
+      ) : !home ? (
+        <Loading />
+      ) : (
+        <>
+          <div className="stats-grid three">
+            <div className="stat featured">
+              <span>{t('Observed today')}</span>
+              <strong>
+                {energyNumber(home.stats)} <small>kWh</small>
+              </strong>
+              <EnergyBreakdown stats={home.stats} />
+              <Coverage stats={home.stats} />
+            </div>
+            <div className="stat">
+              <span>{t('Daily threshold')}</span>
+              <strong>
+                {number(home.rules.dailyLimit, 1)} <small>kWh</small>
+              </strong>
+              <p>
+                {home.rules.dailyLimit === null
+                  ? t('Set a threshold below')
+                  : t('Individual apartment limit')}
+              </p>
+            </div>
+            <div className="stat">
+              <span>{t('Reading coverage')}</span>
+              <strong>{percent(home.stats.coverage)}</strong>
+              <p>{t('Since midnight, for selected devices')}</p>
+            </div>
+          </div>
+          {!home.stats.complete && (
+            <Notice tone="warning">
+              {t(
+                'This total is partial. It includes meter readings, consumption calculated from power and enabled estimates. Reading gaps and devices without an energy source remain missing data.',
+              )}
+            </Notice>
           )}
-        </Notice>
+          <ClimateSummaryCards climate={home.climate} />
+          <div className="panel">
+            <SectionTitle title={t('Climate history')}>
+              <Range days={days} setDays={setDays} />
+            </SectionTitle>
+            <ClimateHistory points={home.climateHistory} />
+          </div>
+          <div className="panel">
+            <SectionTitle title={t('Apartment history')}>
+              <Range days={days} setDays={setDays} />
+            </SectionTitle>
+            <EnergyChart points={home.history} />
+          </div>
+          <div className="panel">
+            <SectionTitle
+              title={t('Devices')}
+              subtitle={t(
+                'Choose which devices count toward the apartment total and alerts. Open a device to see its history.',
+              )}
+            />
+            <DeviceList
+              devices={home.devices}
+              onSaved={() => {
+                refresh();
+                onMonitoringChanged?.();
+              }}
+            />
+          </div>
+          <RulesForm key={home.id} home={home} onSaved={refresh} />
+        </>
       )}
-      <ClimateSummaryCards climate={home.climate} />
-      <div className="panel">
-        <SectionTitle title={t('Climate history')}>
-          <Range days={days} setDays={setDays} />
-        </SectionTitle>
-        <ClimateHistory points={home.climateHistory} />
-      </div>
-      <div className="panel">
-        <SectionTitle title={t('Apartment history')}>
-          <Range days={days} setDays={setDays} />
-        </SectionTitle>
-        <EnergyChart points={home.history} />
-      </div>
-      <div className="panel">
-        <SectionTitle
-          title={t('Devices')}
-          subtitle={t(
-            'Choose which devices count toward the apartment total and alerts. Open a device to see its history.',
-          )}
-        />
-        <DeviceList
-          devices={home.devices}
-          onSaved={() => {
-            refresh();
-            onMonitoringChanged?.();
-          }}
-        />
-      </div>
-      <RulesForm key={home.id} home={home} onSaved={refresh} />
     </>
   );
 }

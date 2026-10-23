@@ -92,17 +92,20 @@ export function SectionTitle({
 }
 export function PageTitle({
   title,
+  titleControl,
   subtitle,
   children,
 }: {
   title: string;
+  titleControl?: ReactNode;
   subtitle: string;
   children?: ReactNode;
 }) {
   return (
-    <header className="page-title">
+    <header className={`page-title${titleControl ? ' has-title-control' : ''}`}>
       <div>
-        <h1>{title}</h1>
+        <h1 className={titleControl ? 'visually-hidden' : undefined}>{title}</h1>
+        {titleControl}
         <p>{subtitle}</p>
       </div>
       {children}
