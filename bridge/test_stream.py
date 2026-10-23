@@ -24,6 +24,30 @@ class EnergyReportsTests(unittest.TestCase):
                 {'deviceId': 'd', 'code': 'add_ele', 'at': 1792144800000, 'kwh': expected}])
         self.assertEqual(energy_reports(self.message(at='1792144800'), {'d': self.target()})[0]['at'], 1792144800000)
 
+    def test_unitless_standard_meter_is_discovered_and_live_dp_adds_scaled_energy(self):
+        target = self.target(scale=3, local=True)
+        del target['specification']['status'][0]['values']['unit']
+        target['device'].local_strategy = {17: {
+            'value_convert': 'default', 'status_code': 'add_ele',
+            'config_item': {'statusFormat': '{"add_ele":"$"}', 'valueType': 'Integer',
+                            'valueDesc': '{"min":0,"max":9999999,"scale":3,"step":1}'}}}
+        with patch('stream.create_api'):
+            worker = AccountStream({}, lambda message: None)
+            try:
+                worker.collect_target({'id': 'd', 'category': 'dlq',
+                                       'status': [{'code': 'add_ele', 'value': 184}]},
+                                      target['specification'], target['reports'])
+                self.assertIn('d', worker.pending)
+                self.assertEqual(worker.pending['d']['code'], 'add_ele')
+                msg = self.message(145)
+                msg['data']['dataId'] = 'meter-report'
+                msg['data']['status'][0] = {'dpId': 17, 'value': 145, 't': 1792144800000}
+                self.assertEqual(energy_reports(msg, {'d': target}), [{
+                    'deviceId': 'd', 'code': 'add_ele', 'at': 1792144800000,
+                    'kwh': 0.145, 'reportId': 'meter-report'}])
+            finally:
+                worker.stop()
+
     def test_only_actual_incremental_fields_with_valid_report_timestamps_are_emitted(self):
         for msg in [self.message(True), self.message(-1), self.message(float('inf')),
                     self.message(at=None), self.message(at=True), self.message(at=1.25),
