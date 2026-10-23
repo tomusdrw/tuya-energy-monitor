@@ -78,6 +78,7 @@ function RulesForm({ home, onSaved }: { home: HomeDetail; onSaved: () => void })
             {t('Daily energy threshold')} <span className="field-unit">kWh</span>
             <input
               type="number"
+              inputMode="decimal"
               min="0.1"
               max="100000"
               step="0.1"
@@ -116,6 +117,7 @@ function RulesForm({ home, onSaved }: { home: HomeDetail; onSaved: () => void })
           {t('Comparison window (days)')}
           <input
             type="number"
+            inputMode="numeric"
             min="7"
             max="90"
             step="1"
@@ -128,6 +130,7 @@ function RulesForm({ home, onSaved }: { home: HomeDetail; onSaved: () => void })
           {t('Increase over average (%)')}
           <input
             type="number"
+            inputMode="numeric"
             min="1"
             max="10000"
             value={rules.increasePercent}
@@ -139,6 +142,7 @@ function RulesForm({ home, onSaved }: { home: HomeDetail; onSaved: () => void })
           {t('Minimum increase (kWh)')}
           <input
             type="number"
+            inputMode="decimal"
             min="0.1"
             max="100000"
             step="0.1"
@@ -256,7 +260,7 @@ export function HomePage({ id }: { id: string }) {
                     </small>
                   </div>
                 </div>
-                <span>
+                <span className="device-source">
                   <Badge
                     tone={
                       d.energySource === 'measured'
@@ -283,10 +287,14 @@ export function HomePage({ id }: { id: string }) {
                             : t('No energy data')}
                   </Badge>
                 </span>
-                <span className="tabular">
-                  {energyNumber(d.stats)} <small>kWh</small>
+                <span className="device-energy tabular">
+                  <span className="mobile-field-label">{t('Today')}</span>
+                  <span>
+                    {energyNumber(d.stats)} <small>kWh</small>
+                  </span>
                 </span>
-                <span className="subtle">
+                <span className="device-reading subtle">
+                  <span className="mobile-field-label">{t('Last reading')}</span>
                   {date(d.measurementProvider === 'tuya_ai' ? d.measurementAt : d.lastSeen)}
                 </span>
                 <ChevronRight size={17} />
@@ -424,7 +432,6 @@ export function DevicePage({ id }: { id: string }) {
           )}
         </Notice>
       )}
-      <EstimationForm key={device.id} device={device} onSaved={refresh} />
       <div className="panel">
         <SectionTitle title={t('Device history')}>
           <Range days={days} setDays={setDays} />
@@ -451,6 +458,7 @@ export function DevicePage({ id }: { id: string }) {
           )}
         </p>
       </div>
+      <EstimationForm key={device.id} device={device} onSaved={refresh} />
     </>
   );
 }
@@ -582,6 +590,11 @@ export function AccountsPage() {
                     'The consent screen may show Home Assistant because we use the same sign-in mechanism. The QR code expires after 5 minutes.',
                   )}
                 </p>
+                <p className="field-help">
+                  {t(
+                    'Using this phone? Display the QR code on another screen, then scan it with Tuya or Smart Life on your phone.',
+                  )}
+                </p>
                 <div className="button-row">
                   <button className="button primary" disabled={busy} onClick={confirm}>
                     {busy ? t('Checking…') : t("I've approved it — check")}
@@ -694,6 +707,19 @@ export function SettingsPage() {
         title={t('Settings')}
         subtitle={t('Your instance configuration and how monitoring works.')}
       />
+      <section className="panel prose">
+        <SectionTitle title={t('Use on your phone')} />
+        <p>
+          {t(
+            'iPhone: open the Share menu and choose Add to Home Screen. Android: open the browser menu and choose Install app or Add to Home Screen.',
+          )}
+        </p>
+        <p>
+          {t(
+            'Open the application over HTTPS to install it. Monitoring needs a connection to your server; readings are not available offline.',
+          )}
+        </p>
+      </section>
       <div className="panel">
         <SectionTitle title={t('Email notifications')} subtitle={t('Delivered by Resend')}>
           <Mail size={23} />

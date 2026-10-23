@@ -1,6 +1,13 @@
 import type { Messages } from '../../shared/i18n';
 
 export const messages: Messages = {
+  'Use on your phone': 'Korzystaj na telefonie',
+  'iPhone: open the Share menu and choose Add to Home Screen. Android: open the browser menu and choose Install app or Add to Home Screen.':
+    'iPhone: otwórz menu Udostępnij i wybierz Do ekranu początkowego. Android: otwórz menu przeglądarki i wybierz Zainstaluj aplikację lub Dodaj do ekranu głównego.',
+  'Open the application over HTTPS to install it. Monitoring needs a connection to your server; readings are not available offline.':
+    'Otwórz aplikację przez HTTPS, aby ją zainstalować. Monitoring wymaga połączenia z Twoim serwerem; odczyty nie są dostępne offline.',
+  'Using this phone? Display the QR code on another screen, then scan it with Tuya or Smart Life on your phone.':
+    'Korzystasz z tego telefonu? Wyświetl kod QR na innym ekranie, a następnie zeskanuj go aplikacją Tuya lub Smart Life na telefonie.',
   'Tuya.ai meter': 'Licznik Tuya.ai',
   'kWh meter · QR': 'Licznik kWh · QR',
   'Measurement source: {source} · last reading: {date}':

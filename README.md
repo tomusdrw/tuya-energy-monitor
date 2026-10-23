@@ -34,6 +34,27 @@ per database. `/healthz` checks process health; connection/measurement health
 is visible after login. The container runs as UID/GID 1000. A bind-mounted
 data directory must be writable by that user.
 
+## Use on a phone (PWA)
+
+Open the application at its HTTPS address. On iPhone, use **Share → Add to Home
+Screen**; on Android, use the browser menu's **Install app** or **Add to Home
+Screen** option (wording depends on the browser). The manifest provides an app
+name, home-screen icons and standalone launch. Installation requires HTTPS on a
+phone; a plain HTTP LAN/Tailscale IP does not meet that requirement. Localhost is
+allowed for development. See the [browser installation requirements](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable).
+
+Monitoring still needs a connection to the server. There is no offline cache or
+service worker, and private readings and credentials are not cached for offline
+use. A missing connection is not a zero-energy reading.
+
+On small screens, the bottom navigation opens the overview, apartments, accounts,
+alerts and settings. Device cards retain source and reading time. Charts include
+**View daily readings** for values accessible by touch or keyboard. When connecting
+Tuya from the same phone, display the QR code on another screen to scan it.
+
+The PNG icons in `public/icons/` are raster exports of `assets/icon.svg`. The
+maskable icon uses a solid background and centers the artwork within its safe area.
+
 ## Language
 
 English is the default, including on the sign-in screen. Use the **Language**

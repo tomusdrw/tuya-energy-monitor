@@ -10,8 +10,6 @@ import {
   ChevronRight,
   ShieldCheck,
   ArrowUpRight,
-  Menu,
-  X,
 } from 'lucide-react';
 import type { Overview, SettingsView } from '../shared/types';
 import { api, useApi } from './api';
@@ -57,11 +55,11 @@ function Login({ onLogin }: { onLogin: () => void }) {
         <Brand />
         <div>
           <span className="eyebrow light">{t('YOUR APARTMENTS. ONE VIEW.')}</span>
-          <h1>
+          <h2>
             {t('Keep your energy')}
             <br />
             {t('under control.')}
-          </h1>
+          </h2>
           <p>
             {t('See how much energy your heating uses.')}
             <br />
@@ -83,7 +81,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
           <span className="secure-icon">
             <ShieldCheck size={27} />
           </span>
-          <h2>{t('Welcome back')}</h2>
+          <h1>{t('Welcome back')}</h1>
           <p>{t('Sign in to your monitoring dashboard.')}</p>
           {error && <Notice tone="error">{t(error)}</Notice>}
           <label>
@@ -94,7 +92,6 @@ function Login({ onLogin }: { onLogin: () => void }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              autoFocus
               maxLength={1024}
             />
           </label>
@@ -266,8 +263,7 @@ export default function App() {
 
 function Shell({ onLogout }: { onLogout: () => void }) {
   const { t, number } = useI18n(appMessages);
-  const [route, setRoute] = useState(location.hash.slice(1)),
-    [menu, setMenu] = useState(false);
+  const [route, setRoute] = useState(location.hash.slice(1));
   const [days, setDays] = useState(14),
     [syncing, setSyncing] = useState(false),
     [message, setMessage] = useState('');
@@ -276,22 +272,32 @@ function Shell({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     const change = () => {
       setRoute(location.hash.slice(1));
-      setMenu(false);
       setMessage('');
       window.scrollTo(0, 0);
+      requestAnimationFrame(() =>
+        document.getElementById('main-content')?.focus({ preventScroll: true }),
+      );
     };
     window.addEventListener('hashchange', change);
     return () => window.removeEventListener('hashchange', change);
   }, []);
   const nav = [
-    { path: '', label: 'Overview', icon: LayoutDashboard },
-    { path: 'homes', label: 'Apartments', icon: Building2 },
-    { path: 'accounts', label: 'Connected accounts', icon: Link2 },
-    { path: 'alerts', label: 'Notifications', icon: Bell },
-    { path: 'settings', label: 'Settings', icon: Settings },
+    { path: '', label: 'Overview', shortLabel: 'Overview', icon: LayoutDashboard },
+    { path: 'homes', label: 'Apartments', shortLabel: 'Apartments', icon: Building2 },
+    { path: 'accounts', label: 'Connected accounts', shortLabel: 'Accounts', icon: Link2 },
+    { path: 'alerts', label: 'Notifications', shortLabel: 'Alerts', icon: Bell },
+    { path: 'settings', label: 'Settings', shortLabel: 'Settings', icon: Settings },
   ];
   const active = route.startsWith('home/') || route.startsWith('device/') ? 'homes' : route;
   const title = nav.find((n) => n.path === active)?.label ?? 'Overview';
+  async function logout() {
+    try {
+      await api('/auth/logout', 'POST', {});
+      onLogout();
+    } catch (e) {
+      setMessage((e as Error).message);
+    }
+  }
   async function sync() {
     setSyncing(true);
     setMessage('');
@@ -306,22 +312,18 @@ function Shell({ onLogout }: { onLogout: () => void }) {
   }
   return (
     <div className="app-shell">
-      {menu && (
-        <button
-          className="menu-backdrop"
-          aria-label={t('Close menu')}
-          onClick={() => setMenu(false)}
-        />
-      )}
-      <aside className={`sidebar ${menu ? 'open' : ''}`}>
+      <a
+        className="skip-link"
+        href="#main-content"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById('main-content')?.focus();
+        }}
+      >
+        {t('Skip to content')}
+      </a>
+      <aside className="sidebar">
         <Brand />
-        <button
-          className="mobile-close icon-button"
-          aria-label={t('Close menu')}
-          onClick={() => setMenu(false)}
-        >
-          <X />
-        </button>
         <div className="nav-label">{t('MONITORING')}</div>
         <nav aria-label={t('Main menu')}>
           {nav.map((n) => (
@@ -358,14 +360,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
             title={t('Log out')}
             aria-label={t('Log out')}
             className="icon-button"
-            onClick={async () => {
-              try {
-                await api('/auth/logout', 'POST', {});
-                onLogout();
-              } catch (e) {
-                setMessage((e as Error).message);
-              }
-            }}
+            onClick={logout}
           >
             <LogOut size={18} />
           </button>
@@ -374,13 +369,6 @@ function Shell({ onLogout }: { onLogout: () => void }) {
       <div className="main-shell">
         <div className="topbar">
           <div className="breadcrumb">
-            <button
-              className="mobile-menu icon-button"
-              aria-label={t('Open menu')}
-              onClick={() => setMenu(true)}
-            >
-              <Menu size={21} />
-            </button>
             <span>{t('Owner dashboard')}</span>
             <ChevronRight size={14} />
             <strong>{t(title)}</strong>
@@ -388,16 +376,26 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           <div className="topbar-actions">
             <LanguageSwitcher />
             <button
-              className="button secondary compact"
+              className="button secondary compact refresh-button"
+              aria-label={syncing || settings.data?.syncing ? t('Syncing…') : t('Refresh data')}
+              title={t('Refresh data')}
               onClick={sync}
               disabled={syncing || settings.data?.syncing}
             >
               <RefreshCw size={15} className={syncing || settings.data?.syncing ? 'spin' : ''} />
-              {syncing || settings.data?.syncing ? t('Syncing…') : t('Refresh data')}
+              <span>{syncing || settings.data?.syncing ? t('Syncing…') : t('Refresh data')}</span>
+            </button>
+            <button
+              className="mobile-logout icon-button"
+              onClick={logout}
+              aria-label={t('Log out')}
+              title={t('Log out')}
+            >
+              <LogOut size={19} />
             </button>
           </div>
         </div>
-        <main className="content" id="main-content">
+        <main className="content" id="main-content" tabIndex={-1}>
           {message && <Notice>{t(message)}</Notice>}
           {overview.error && <Notice tone="error">{t(overview.error)}</Notice>}
           {route === '' &&
@@ -447,6 +445,20 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           <span>{t('Europe/Warsaw · Status every 60 s · Meters every 5 min')}</span>
         </footer>
       </div>
+      <nav className="mobile-nav" aria-label={t('Main menu')}>
+        {nav.map((n) => (
+          <a
+            key={n.path}
+            href={`#${n.path}`}
+            title={t(n.label)}
+            aria-current={active === n.path ? 'page' : undefined}
+            className={active === n.path ? 'active' : ''}
+          >
+            <n.icon size={21} aria-hidden="true" />
+            <span>{t(n.shortLabel)}</span>
+          </a>
+        ))}
+      </nav>
     </div>
   );
 }
