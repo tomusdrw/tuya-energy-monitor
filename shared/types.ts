@@ -36,6 +36,14 @@ export interface AccountView {
   healthy: boolean;
   homeCount: number;
   deviceCount: number;
+  tuyaAi: {
+    configured: boolean;
+    region: string | null;
+    lastSuccess: number | null;
+    error: string | null;
+    healthy: boolean;
+    meteredDevices: number;
+  };
 }
 export interface DeviceView {
   id: string;
@@ -52,6 +60,9 @@ export interface DeviceView {
   reportingConnected: boolean;
   lastEnergyReport: number | null;
   counterKwh: number | null;
+  measurementProvider: 'qr' | 'tuya_ai' | null;
+  measurementAt: number | null;
+  measurementError: string | null;
   temperature: number | null;
   powerW: number | null;
   stats: EnergyStats;

@@ -2,6 +2,21 @@ import { translate, type Language } from './i18n.js';
 
 // Canonical English messages and their exact legacy Polish equivalents.
 export const systemMessages: Record<string, string> = {
+  'Check the Tuya.ai key and its region.': 'Sprawdź klucz Tuya.ai i jego region.',
+  'Tuya.ai access was rejected. Check the key permissions.':
+    'Odrzucono dostęp Tuya.ai. Sprawdź uprawnienia klucza.',
+  'Tuya.ai rate limit reached. The next scheduled reading will retry.':
+    'Osiągnięto limit zapytań Tuya.ai. Ponowimy próbę przy kolejnym zaplanowanym odczycie.',
+  'Tuya.ai returned an invalid device response.':
+    'Tuya.ai zwróciło nieprawidłową odpowiedź urządzenia.',
+  'Could not read Tuya.ai. The next scheduled reading will retry.':
+    'Nie udało się odczytać Tuya.ai. Ponowimy próbę przy kolejnym zaplanowanym odczycie.',
+  'Tuya.ai did not provide a valid energy counter.':
+    'Tuya.ai nie udostępniło poprawnego licznika energii.',
+  'Tuya.ai configuration changed. Try again.':
+    'Konfiguracja Tuya.ai została zmieniona. Spróbuj ponownie.',
+  'The key does not grant access to any known devices on this account. Synchronize QR and check the selected account.':
+    'Klucz nie daje dostępu do żadnego znanego urządzenia tego konta. Zsynchronizuj QR i sprawdź wybrane konto.',
   'Requests must come from the application address (APP_ORIGIN).':
     'Żądanie musi pochodzić z adresu aplikacji (APP_ORIGIN).',
   'Sign in to continue.': 'Zaloguj się, aby kontynuować.',

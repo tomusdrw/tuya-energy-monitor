@@ -55,6 +55,109 @@ export const snapshotSchema = z.object({
 export type Snapshot = z.infer<typeof snapshotSchema>;
 type Row = Record<string, any>;
 
+/** Same continuity rules for both cumulative sources; provenance is part of the baseline. */
+function recordCounter(
+  db: DatabaseSync,
+  id: string,
+  now: number,
+  counter: number | null,
+  code: string | null,
+  online: boolean,
+  provider = 'qr',
+  series = '',
+) {
+  const last = db
+    .prepare('SELECT * FROM readings WHERE device_id=? ORDER BY at DESC LIMIT 1')
+    .get(id) as Row | undefined;
+  if (last && (last.at > now || (last.at === now && last.provider === provider))) return;
+  db.prepare(
+    'INSERT OR REPLACE INTO readings(device_id,at,counter_kwh,code,online,provider,series) VALUES(?,?,?,?,?,?,?)',
+  ).run(id, now, counter, code, Number(online), provider, series);
+  if (
+    last &&
+    now > last.at &&
+    last.online &&
+    online &&
+    counter !== null &&
+    last.counter_kwh !== null &&
+    last.code === code &&
+    last.provider === provider &&
+    last.series === series &&
+    now - last.at <= MAX_GAP &&
+    counter >= last.counter_kwh &&
+    !db
+      .prepare('SELECT 1 FROM intervals WHERE device_id=? AND start<? AND end>? LIMIT 1')
+      .get(id, now, last.at)
+  ) {
+    db.prepare('INSERT INTO intervals(device_id,start,end,kwh) VALUES(?,?,?,?)').run(
+      id,
+      last.at,
+      now,
+      Math.round((counter - last.counter_kwh) * 1e9) / 1e9,
+    );
+  }
+}
+
+export function ingestAiReading(
+  db: DatabaseSync,
+  accountId: string,
+  remoteId: string,
+  reading: { code: string; counterKwh: number; online: boolean; series: string },
+  revision: number,
+  now: number,
+): boolean {
+  return transaction(db, () => {
+    const d = db
+      .prepare(
+        `SELECT d.* FROM devices d JOIN homes h ON h.id=d.home_id JOIN accounts a ON a.id=h.account_id
+      WHERE d.id=? AND h.account_id=? AND a.ai_secret IS NOT NULL AND a.ai_revision=?
+      AND d.qr_energy_kind='unsupported' AND d.present=1`,
+      )
+      .get(scopedId(accountId, remoteId), accountId, revision) as Row | undefined;
+    if (!d || !Number.isFinite(reading.counterKwh) || reading.counterKwh < 0) return false;
+    const last = db
+      .prepare('SELECT at,provider FROM readings WHERE device_id=? ORDER BY at DESC LIMIT 1')
+      .get(d.id) as Row | undefined;
+    if (last && (last.at > now || (last.at === now && last.provider === 'tuya_ai'))) return false;
+    db.prepare(
+      `UPDATE devices SET energy_kind='cumulative',energy_code=?,counter_kwh=?,
+      measurement_provider='tuya_ai',measurement_at=?,measurement_online=?,measurement_error=NULL WHERE id=?`,
+    ).run(reading.code, reading.counterKwh, now, Number(reading.online), d.id);
+    recordCounter(
+      db,
+      d.id,
+      now,
+      reading.counterKwh,
+      reading.code,
+      reading.online,
+      'tuya_ai',
+      `${revision}:${reading.series}`,
+    );
+    return true;
+  });
+}
+
+export function failAiReading(db: DatabaseSync, id: string, error: string, now: number): void {
+  const d = db
+    .prepare("SELECT id FROM devices WHERE id=? AND measurement_provider='tuya_ai'")
+    .get(id);
+  if (!d) return;
+  transaction(db, () => {
+    db.prepare('UPDATE devices SET measurement_error=? WHERE id=?').run(error, id);
+    recordCounter(db, id, now, null, null, false, 'tuya_ai');
+  });
+}
+
+export function measurementFresh(d: Row, now: number): boolean {
+  return Boolean(
+    d.present &&
+    !d.measurement_error &&
+    d.measurement_online &&
+    d.measurement_at !== null &&
+    now - d.measurement_at <= MAX_GAP,
+  );
+}
+
 export function localDate(at: number): string {
   return Temporal.Instant.fromEpochMilliseconds(at)
     .toZonedDateTimeISO(TIMEZONE)
@@ -99,16 +202,15 @@ export function ingestSnapshot(
           db.prepare('UPDATE devices SET present=1 WHERE id=?').run(id);
           continue;
         }
-        const previousDevice = db
-          .prepare(
-            'SELECT status_updated_at,energy_kind,energy_code,incremental_since FROM devices WHERE id=?',
-          )
-          .get(id) as Row | undefined;
+        const previousDevice = db.prepare('SELECT * FROM devices WHERE id=?').get(id) as
+          Row | undefined;
         if (previousDevice?.status_updated_at >= now) {
           db.prepare('UPDATE devices SET present=1 WHERE id=?').run(id);
           continue;
         }
         const counter = device.energyKind === 'cumulative' ? device.counterKwh : null;
+        const keepAi =
+          previousDevice?.measurement_provider === 'tuya_ai' && device.energyKind === 'unsupported';
         const included =
           device.energyKind === 'power' ||
           device.energyKind === 'incremental' ||
@@ -129,12 +231,25 @@ export function ingestSnapshot(
           Number(included),
           Number(device.online),
           now,
-          device.energyKind,
-          device.energyCode,
-          counter,
+          keepAi ? previousDevice.energy_kind : device.energyKind,
+          keepAi ? previousDevice.energy_code : device.energyCode,
+          keepAi ? previousDevice.counter_kwh : counter,
           device.temperature,
           device.powerW,
         );
+        db.prepare('UPDATE devices SET qr_energy_kind=?,qr_energy_code=? WHERE id=?').run(
+          device.energyKind,
+          device.energyCode,
+          id,
+        );
+        if (!keepAi)
+          db.prepare(
+            `UPDATE devices SET measurement_provider='qr',measurement_at=?,measurement_online=?,measurement_error=NULL WHERE id=?`,
+          ).run(
+            counter !== null || device.energyKind === 'incremental' ? now : null,
+            Number(device.online),
+            id,
+          );
         db.prepare('UPDATE devices SET power_field=? WHERE id=?').run(
           device.powerField ? JSON.stringify(device.powerField) : null,
           id,
@@ -149,26 +264,7 @@ export function ingestSnapshot(
             now,
             id,
           );
-        db.prepare(
-          'INSERT INTO readings(device_id,at,counter_kwh,code,online) VALUES(?,?,?,?,?)',
-        ).run(id, now, counter, device.energyCode, Number(device.online));
-        if (
-          last &&
-          last.online &&
-          device.online &&
-          counter !== null &&
-          last.counter_kwh !== null &&
-          device.energyCode === last.code &&
-          now - last.at <= MAX_GAP &&
-          counter >= last.counter_kwh
-        ) {
-          db.prepare('INSERT INTO intervals(device_id,start,end,kwh) VALUES(?,?,?,?)').run(
-            id,
-            last.at,
-            now,
-            counter - last.counter_kwh,
-          );
-        }
+        if (!keepAi) recordCounter(db, id, now, counter, device.energyCode, device.online);
         recordPower(db, id, device.statusFields, device.online, now);
         recordHeatingState(db, id, device.statusFields, device.online, now);
       }
@@ -273,10 +369,12 @@ export function usage(
     milliseconds += duration;
     if (duration / Math.max(1, end - start) >= 0.95) covered++;
     const recent =
-      d.online &&
-      d.present &&
-      d.last_seen !== null &&
-      now - d.last_seen <= (source === 'estimated' ? MAX_HEATING_GAP : MAX_GAP);
+      source === 'measured'
+        ? measurementFresh(d, now)
+        : d.online &&
+          d.present &&
+          d.last_seen !== null &&
+          now - d.last_seen <= (source === 'estimated' ? MAX_HEATING_GAP : MAX_GAP);
     if (
       recent &&
       ((source === 'measured' &&
@@ -328,7 +426,9 @@ export function accounts(db: DatabaseSync, now = Date.now()): AccountView[] {
   return (
     db
       .prepare(
-        `SELECT a.id,a.label,a.last_sync,a.error,
+        `SELECT a.id,a.label,a.last_sync,a.error,a.ai_secret IS NOT NULL AS ai_configured,
+    a.ai_region,a.ai_last_success,a.ai_error,
+    (SELECT COUNT(*) FROM devices d JOIN homes h ON h.id=d.home_id WHERE h.account_id=a.id AND d.measurement_provider='tuya_ai' AND d.present=1) AS ai_metered,
     (SELECT COUNT(*) FROM homes h WHERE h.account_id=a.id) AS home_count,
     (SELECT COUNT(*) FROM devices d JOIN homes h ON h.id=d.home_id WHERE h.account_id=a.id) AS device_count
     FROM accounts a ORDER BY label`,
@@ -342,6 +442,19 @@ export function accounts(db: DatabaseSync, now = Date.now()): AccountView[] {
     healthy: !a.error && a.last_sync !== null && now - a.last_sync <= MAX_GAP,
     homeCount: a.home_count,
     deviceCount: a.device_count,
+    tuyaAi: {
+      configured: Boolean(a.ai_configured),
+      region: a.ai_region,
+      lastSuccess: a.ai_last_success,
+      error: a.ai_error,
+      healthy: Boolean(
+        a.ai_configured &&
+        !a.ai_error &&
+        a.ai_last_success !== null &&
+        now - a.ai_last_success <= MAX_GAP,
+      ),
+      meteredDevices: a.ai_metered,
+    },
   }));
 }
 
@@ -392,12 +505,14 @@ function deviceView(db: DatabaseSync, d: Row, now: number): DeviceView {
     name: d.name,
     category: d.category,
     included: Boolean(d.included),
-    online: Boolean(d.online),
+    online: Boolean(d.measurement_provider === 'tuya_ai' ? d.measurement_online : d.online),
     present: Boolean(d.present),
     fresh:
-      d.energy_kind === 'power'
-        ? hasFreshPower(d, now)
-        : Boolean(d.online && d.present && d.last_seen !== null && now - d.last_seen <= MAX_GAP),
+      energySource(d) === 'measured'
+        ? measurementFresh(d, now)
+        : d.energy_kind === 'power'
+          ? hasFreshPower(d, now)
+          : Boolean(d.online && d.present && d.last_seen !== null && now - d.last_seen <= MAX_GAP),
     lastSeen: d.last_seen,
     energyKind: d.energy_kind,
     energyCode: d.energy_code,
@@ -409,6 +524,9 @@ function deviceView(db: DatabaseSync, d: Row, now: number): DeviceView {
       db.prepare('SELECT MAX(at) AS at FROM energy_reports WHERE device_id=?').get(d.id) as Row
     ).at,
     counterKwh: d.counter_kwh,
+    measurementProvider: energySource(d) === 'measured' ? d.measurement_provider : null,
+    measurementAt: d.measurement_at,
+    measurementError: d.measurement_error,
     temperature: d.temperature,
     powerW: d.power_field ? (hasFreshPower(d, now) ? d.power_w : null) : d.power_w,
     energySource: energySource(d),

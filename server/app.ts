@@ -17,11 +17,14 @@ import { Collector } from './collector.js';
 import { TuyaStream } from './stream.js';
 import { configureEstimation } from './estimation.js';
 import { evaluateNotifications, deliverPending } from './notifications.js';
+import { TuyaAiClient, safeAiError, type AiClient } from './tuya-ai.js';
+import { TuyaAiIntegration, AiConfigurationError } from './tuya-ai-integration.js';
 
 interface Dependencies {
   db?: DatabaseSync;
   background?: boolean;
   tuya?: TuyaCall;
+  tuyaAi?: AiClient;
 }
 const rulesSchema = z
   .object({
@@ -59,6 +62,7 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
   const app = Fastify({ logger: false, bodyLimit: 16384, requestTimeout: 200000 });
   const tuya =
     dependencies.tuya ?? ((operation, payload) => callTuya(operation, payload, config.python));
+  const tuyaAi = new TuyaAiIntegration(db, config, dependencies.tuyaAi ?? new TuyaAiClient());
   const collector = new Collector(
     db,
     config,
@@ -67,6 +71,7 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
     dependencies.tuya
       ? undefined
       : (session, onMessage) => new TuyaStream(session, onMessage, config.python),
+    tuyaAi,
   );
   let delivery: Promise<void> | null = null;
   collector.afterSync = async () => {
@@ -81,6 +86,7 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
           delivery = null;
         });
   };
+  tuyaAi.afterSync = collector.afterSync;
   const flows = new Map<
     string,
     {
@@ -259,6 +265,35 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
     },
   );
   app.get('/api/accounts', async () => accounts(db));
+  app.put<{ Params: { id: string } }>(
+    '/api/accounts/:id/tuya-ai',
+    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const { key } = z
+        .object({ key: z.string().trim().min(1).max(512) })
+        .strict()
+        .parse(request.body);
+      try {
+        await tuyaAi.save(request.params.id, key);
+        void tuyaAi.sync().catch(() => {});
+        return { ok: true };
+      } catch (error) {
+        return reply.code(error instanceof AiConfigurationError ? error.statusCode : 502).send({
+          error: error instanceof AiConfigurationError ? error.message : safeAiError(error),
+        });
+      }
+    },
+  );
+  app.delete<{ Params: { id: string } }>('/api/accounts/:id/tuya-ai', async (request, reply) => {
+    try {
+      tuyaAi.remove(request.params.id);
+      return { ok: true };
+    } catch (error) {
+      if (error instanceof AiConfigurationError)
+        return reply.code(error.statusCode).send({ error: error.message });
+      throw error;
+    }
+  });
   app.get('/api/notifications', async () => notifications(db));
   app.get('/api/settings', async () => ({
     timezone: TIMEZONE,

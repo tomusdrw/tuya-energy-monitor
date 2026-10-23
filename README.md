@@ -9,7 +9,8 @@ The application includes an English-default dashboard with an English/Polish
 language switch, password login,
 apartment/device drill-down, history, individual thresholds, anomaly detection
 and Resend notifications. Energy support depends on what each device exposes
-through Tuya's sharing API. Unsupported devices remain visible as missing data.
+through Tuya's sharing API or the optional per-account Tuya.ai integration.
+Unsupported devices remain visible as missing data.
 The application never controls heaters or changes their settings.
 
 ## Run with Docker
@@ -79,6 +80,67 @@ No local network access to the apartments is needed. Cloud errors are displayed;
 expired authorization can be renewed with **Reconnect**. Credentials are
 encrypted with AES-256-GCM before storage and never returned to the browser.
 
+## Optional Tuya.ai energy meters
+
+In **Connected accounts**, use the **Tuya.ai** form on the relevant Smart Life
+account. Obtain an API key from [Tuya.ai Developer](https://tuya.ai/developer),
+signing in with that Smart Life account, then choose **Check and save**.
+**Change** validates a replacement before saving it; a failed replacement keeps
+the previous configuration. **Remove** stops this source and preserves history.
+The form and its errors support English and Polish.
+
+The key unlocks confirmed cumulative counters that Sharing/QR does not expose,
+including the diagnosed hallway heater's `forward_energy_total`. Its consumption
+joins the existing device/apartment charts, selected-device totals, threshold
+alerts, anomaly checks and weekly summaries under the same coverage rules.
+Device selection remains yours; previously excluded devices stay excluded.
+
+Keys are encrypted with the existing `ENCRYPTION_KEY` in a separate SQLite field,
+independent of refreshed/reconnected QR sessions. Saved keys are never included
+in application API responses. Validation requires an exact device-ID overlap with
+the selected account's current QR inventory; names are never used for matching.
+Each cycle intersects the key's authorized device IDs with that account's known
+inventory. A shared device establishes access, not exclusive ownership of an account.
+
+Tuya.ai has its own five-minute schedule and connection status, separate from QR.
+The account shows the last successful online counter read; the device shows its
+measurement source, reading time and errors. QR polling cannot make an old Tuya.ai
+counter appear fresh. Calls use only GET on the official `devices/all`, `detail`
+and `model` endpoints, with Bearer authentication and a fixed regional host selected
+from the key prefix. The adapter spaces requests by at least 1.1 seconds, times out
+a request after 10 seconds, and makes at most three attempts for 1199 or HTTP 429
+(2/4-second backoff, respecting Retry-After up to 30 seconds; longer waits defer to
+a later cycle). A 90-second account pass budget rotates actual device attempts so
+slow devices cannot permanently starve others. Large inventories may need more
+than one pass; incomplete coverage stays visible. QR collection remains independent.
+Models, including unsupported results, are cached per device and key generation
+for 24 hours in SQLite. Changing/removing the key clears that metadata cache.
+
+Source precedence is **supported QR measurement (including native power) →
+confirmed Tuya.ai counter → explicitly configured runtime estimate**. An established Tuya.ai meter with a
+failed read remains missing measurement data; it does not silently switch to
+estimation. Removing the key permits the configured estimator to resume after
+new observations. Switching source, key generation or model scale/unit starts a
+new baseline. Baselines survive a server restart. The first 0.370 kWh reading adds
+no usage; a valid 0.420 kWh reading five minutes later adds exactly 0.050 kWh.
+Known failures, offline states, resets and gaps over 15 minutes break continuity.
+
+This collects energy **from observation onward**. No hourly statistics are fetched,
+no history is backfilled, and the previously returned hourly zeros are not evidence
+of zero usage. Equality with full Smart Life history is unverified. Reading timestamps
+are API query times, not independently confirmed device-report timestamps.
+
+Contract tests use sanitized real diagnostic property/model fragments; the original
+diagnostic did not retain complete envelopes, so those are reconstructed from the
+[official device-query contract](https://github.com/tuya/tuya-openclaw-skills/blob/master/tuya-smart-control/references/device-query.md)
+and [model contract](https://github.com/tuya/tuya-openclaw-skills/blob/master/tuya-smart-control/references/device-control.md).
+See [fixture provenance](tests/fixtures/tuya-ai/README.md). Offline tests cover units,
+scales, exact consumption, source precedence, failures, account isolation, encrypted
+key lifecycle, in-flight changes, persistent baselines/cache, migrations and Warsaw
+day boundaries. The implemented client has not been compared against Smart Life
+for a new live interval: the prior diagnostic used a key only in process memory,
+and no live key was retained for this implementation.
+
 ## Native power measurements
 
 Devices exposing active power through `cur_power`, `power` or `work_power` are
@@ -105,8 +167,8 @@ Power-derived consumption appears separately as **From power**, including histor
 coverage and notifications, and uses **≈** because polling can miss load changes
 and Tuya may return cached values. It uses actual measured power, rather than an
 assumed heating rating, but is not a direct kWh counter or billing measurement.
-Cumulative counters and live incremental kWh reports take precedence, followed by
-power integration, then configured runtime estimates. Source changes preserve
+Within QR measurements, cumulative counters and live incremental kWh reports take
+precedence, followed by power integration, then configured runtime estimates. Source changes preserve
 history and start a new baseline without adding two sources for the same interval.
 
 ## Thermostat runtime estimates
@@ -228,11 +290,9 @@ history remains in SQLite `heating_observations` and `intervals`.
   `properties.forward_energy_total`, with its scale and unit supplied by
   `GET /v1.0/end-user/devices/{device_id}/model`. Consumption can be calculated
   from consecutive valid counter readings; the first reading is only a baseline.
-  The monitor does not yet poll this separate API or ingest cumulative
-  MQTT reports. Statistics requests must be paced, deduplicated and retried with
-  backoff on Tuya error 1199 (rate limiting). Units and time boundaries must be
-  verified before importing statistics. Unknown raw DP IDs are not treated as
-  energy by guessing their meaning or scale.
+  The optional Tuya.ai integration now polls the confirmed counter through this
+  separate API. Cumulative MQTT reports and hourly statistics are not imported.
+  Unknown raw DP IDs are not treated as energy by guessing their meaning or scale.
 
 The stream uses the pinned [Tuya sharing SDK](https://github.com/tuya/tuya-device-sharing-sdk/tree/0.2.15)
 and its local DP conversion strategies. Report identity and timestamps follow
@@ -331,7 +391,10 @@ Changing the admin password invalidates sessions on the next startup.
 
 Schema v2 migrates existing readings and intervals additively, marking prior
 intervals as measured. Schema v3 adds incremental report storage and subscription
-state. Language support uses existing metadata and requires no additional schema
+state. Schema v4 adds native power observations. Schema v5 adds separate Tuya.ai
+credentials, cached models and measurement provenance while preserving existing
+readings and intervals.
+Language support uses existing metadata and requires no additional schema
 migration. Back up before upgrading; do not run an older application against a
 migrated database.
 

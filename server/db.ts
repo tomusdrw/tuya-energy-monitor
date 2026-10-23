@@ -4,7 +4,7 @@ export function openDatabase(path: string): DatabaseSync {
   const db = new DatabaseSync(path);
   const version = (db.prepare('PRAGMA user_version').get() as { user_version: number })
     .user_version;
-  if (version > 4) {
+  if (version > 5) {
     db.close();
     throw new Error('Unsupported database version');
   }
@@ -98,6 +98,33 @@ export function openDatabase(path: string): DatabaseSync {
           PRIMARY KEY(device_id,at)
         );
         PRAGMA user_version=4;
+      `);
+    });
+  if (version < 5)
+    transaction(db, () => {
+      db.exec(`
+        ALTER TABLE accounts ADD COLUMN ai_secret TEXT;
+        ALTER TABLE accounts ADD COLUMN ai_revision INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE accounts ADD COLUMN ai_region TEXT;
+        ALTER TABLE accounts ADD COLUMN ai_last_success INTEGER;
+        ALTER TABLE accounts ADD COLUMN ai_last_attempt INTEGER;
+        ALTER TABLE accounts ADD COLUMN ai_error TEXT;
+        ALTER TABLE devices ADD COLUMN qr_energy_kind TEXT NOT NULL DEFAULT 'unsupported';
+        ALTER TABLE devices ADD COLUMN qr_energy_code TEXT;
+        ALTER TABLE devices ADD COLUMN measurement_provider TEXT NOT NULL DEFAULT 'qr';
+        ALTER TABLE devices ADD COLUMN measurement_at INTEGER;
+        ALTER TABLE devices ADD COLUMN measurement_online INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE devices ADD COLUMN measurement_error TEXT;
+        ALTER TABLE devices ADD COLUMN ai_attempt_at INTEGER;
+        UPDATE devices SET qr_energy_kind=energy_kind,qr_energy_code=energy_code,
+          measurement_at=last_seen,measurement_online=online;
+        ALTER TABLE readings ADD COLUMN provider TEXT NOT NULL DEFAULT 'qr';
+        ALTER TABLE readings ADD COLUMN series TEXT NOT NULL DEFAULT '';
+        CREATE TABLE ai_models (
+          device_id TEXT PRIMARY KEY REFERENCES devices(id),
+          revision INTEGER NOT NULL, fetched_at INTEGER NOT NULL, meters TEXT NOT NULL
+        );
+        PRAGMA user_version=5;
       `);
     });
   return db;

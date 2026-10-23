@@ -182,6 +182,29 @@ test('v2 migration preserves data and report deduplication survives database reo
   let db: ReturnType<typeof openDatabase> | undefined;
   try {
     const f = fixture(path);
+    // Reconstruct v2, including removal of the later optional Tuya.ai migration.
+    f.db.exec('DROP TABLE ai_models');
+    for (const column of [
+      'ai_secret',
+      'ai_revision',
+      'ai_region',
+      'ai_last_success',
+      'ai_last_attempt',
+      'ai_error',
+    ])
+      f.db.exec(`ALTER TABLE accounts DROP COLUMN ${column}`);
+    for (const column of [
+      'qr_energy_kind',
+      'qr_energy_code',
+      'measurement_provider',
+      'measurement_at',
+      'measurement_online',
+      'measurement_error',
+      'ai_attempt_at',
+    ])
+      f.db.exec(`ALTER TABLE devices DROP COLUMN ${column}`);
+    for (const column of ['provider', 'series'])
+      f.db.exec(`ALTER TABLE readings DROP COLUMN ${column}`);
     f.db.exec(`DROP TABLE power_observations;
       ALTER TABLE devices DROP COLUMN power_field;
       ALTER TABLE devices DROP COLUMN power_updated_at;

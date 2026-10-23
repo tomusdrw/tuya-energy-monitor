@@ -6,6 +6,7 @@ import { ingestHeatingSnapshot } from './estimation.js';
 import { sessionSchema, type TuyaCall } from './tuya.js';
 import type { AccountStream, StreamFactory } from './stream.js';
 import { ingestEnergyReport, setEnergyStreamState } from './incremental.js';
+import type { TuyaAiIntegration } from './tuya-ai-integration.js';
 
 export class Collector {
   private running: Promise<void> | null = null;
@@ -22,6 +23,7 @@ export class Collector {
     private tuya: TuyaCall,
     private clock: () => number = Date.now,
     private streamFactory?: StreamFactory,
+    private tuyaAi?: TuyaAiIntegration,
   ) {
     this.db.exec('UPDATE devices SET energy_stream_at=NULL');
   }
@@ -73,6 +75,7 @@ export class Collector {
   }
   sync(forceFull = true): Promise<void> {
     if (this.stopped) return Promise.resolve();
+    void this.tuyaAi?.sync(forceFull).catch(() => {});
     if (this.running) {
       if (forceFull && !this.runningFull) this.fullRequested = true;
       return this.running;
@@ -172,6 +175,7 @@ export class Collector {
     await this.afterSync();
   }
   start(): void {
+    this.tuyaAi?.start();
     const tick = async () => {
       const started = this.clock();
       try {
@@ -190,7 +194,10 @@ export class Collector {
   async stop(): Promise<void> {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
-    await Promise.all([...this.streams.values()].map(({ worker }) => worker.stop()));
+    await Promise.all([
+      ...[...this.streams.values()].map(({ worker }) => worker.stop()),
+      this.tuyaAi?.stop(),
+    ]);
     this.streams.clear();
     this.db.exec('UPDATE devices SET energy_stream_at=NULL');
     await this.running;

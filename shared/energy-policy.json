@@ -1,0 +1,5 @@
+{
+  "cumulativeCodes": ["total_forward_energy", "forward_energy_total", "total_energy", "total_ele"],
+  "kwhDivisors": { "kwh": 1, "wh": 1000 },
+  "maxScale": 9
+}
