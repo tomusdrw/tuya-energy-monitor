@@ -514,6 +514,7 @@ function deviceView(db: DatabaseSync, d: Row, now: number): DeviceView {
     name: d.name,
     category: d.category,
     included: Boolean(d.included),
+    ignored: Boolean(d.ignored),
     online: Boolean(d.measurement_provider === 'tuya_ai' ? d.measurement_online : d.online),
     present: Boolean(d.present),
     fresh:

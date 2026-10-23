@@ -1,4 +1,7 @@
 export const appMessages: Record<string, string> = {
+  Accounts: 'Konta',
+  Alerts: 'Alerty',
+  'Skip to content': 'Przejdź do treści',
   'Energy usage': 'Zużycie energii',
   'Your apartments and heating in one place.': 'Twoje mieszkania i ogrzewanie — w jednym miejscu.',
   'Start by connecting an account': 'Zacznij od połączenia konta',

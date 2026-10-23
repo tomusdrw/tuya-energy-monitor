@@ -34,6 +34,27 @@ per database. `/healthz` checks process health; connection/measurement health
 is visible after login. The container runs as UID/GID 1000. A bind-mounted
 data directory must be writable by that user.
 
+## Use on a phone (PWA)
+
+Open the application at its HTTPS address. On iPhone, use **Share → Add to Home
+Screen**; on Android, use the browser menu's **Install app** or **Add to Home
+Screen** option (wording depends on the browser). The manifest provides an app
+name, home-screen icons and standalone launch. Installation requires HTTPS on a
+phone; a plain HTTP LAN/Tailscale IP does not meet that requirement. Localhost is
+allowed for development. See the [browser installation requirements](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable).
+
+Monitoring still needs a connection to the server. There is no offline cache or
+service worker, and private readings and credentials are not cached for offline
+use. A missing connection is not a zero-energy reading.
+
+On small screens, the bottom navigation opens the overview, apartments, accounts,
+alerts and settings. Device cards retain source and reading time. Charts include
+**View daily readings** for values accessible by touch or keyboard. When connecting
+Tuya from the same phone, display the QR code on another screen to scan it.
+
+The PNG icons in `public/icons/` are raster exports of `assets/icon.svg`. The
+maskable icon uses a solid background and centers the artwork within its safe area.
+
 ## Language
 
 English is the default, including on the sign-in screen. Use the **Language**
@@ -67,6 +88,15 @@ Documentation uses the English interface labels.
   generic sockets; include those manually. Exclude unrelated appliance meters.
 - Set a daily threshold **independently for each apartment**. No threshold is
   enabled by default. Adjust or disable anomaly detection in the same form.
+
+Each apartment's device list has an **Included / Excluded** switch that immediately
+updates its total and the overview. **Ignore** moves a device into the initially
+collapsed **Ignored devices** section and excludes it from totals and alerts.
+Use this for devices you have reviewed and do not need for energy monitoring.
+Ordinary excluded devices remain in the main list. **Restore** returns a device
+to that list with monitoring still off; enable its switch when you want it counted.
+These choices are saved on the server and survive synchronization. Existing devices
+are not automatically marked ignored, and ignoring never deletes their history.
 
 Accounts and devices remain scoped to their account, even if names match.
 Background collection refreshes inventory and energy counters every five minutes,
@@ -406,6 +436,10 @@ readings and intervals.
 Language support uses existing metadata and requires no additional schema
 migration. Back up before upgrading; do not run an older application against a
 migrated database.
+
+Schema v6 adds the saved ignored-device status, preserving existing monitoring
+selections and readings. Schema v7 adds temperature-estimation configuration and
+field metadata, preserving existing relay settings and energy history.
 
 Run one process per database. Raw readings, heating observations and intervals are retained; size grows
 with time and the number of devices. Schedule volume backups and monitor disk

@@ -40,7 +40,7 @@ Interfaces: `TemperatureField {code, scale, unit}`, `TemperatureMapping {current
 Files: `server/db.ts`, `server/estimation.ts`, `shared/types.ts`, `src/EstimationForm.tsx`, locale files, `README.md`, estimation/API/UI tests.
 
 - [x] Add failing integration tests for temperature-derived kWh, configuration persistence, missing reads, baseline changes and migration; add rendered form tests.
-- [x] Add schema-v6 nullable temperature configuration with legacy relay defaults.
+- [x] Add schema-v7 nullable temperature configuration with legacy relay defaults; retain main's v6 ignored-device migration.
 - [x] Extend estimation validation, observations and discovery; retain configuration on fast polls and break on metadata changes.
 - [x] Add selectable method and detected temperature fields to the form; explain estimation in PL/EN and README.
 - [x] Run `npm test`, `python -m unittest discover -s bridge`, and `npm run build`.
@@ -53,7 +53,7 @@ Files: `server/db.ts`, `server/estimation.ts`, `shared/types.ts`, `src/Estimatio
 
 ## Verification record
 
-- `npm test`: 132 passed.
+- `npm test`: 141 passed after integrating main (including migration from the released v6 schema).
 - `.venv/bin/python -m unittest discover -s bridge`: 31 passed.
 - `npm run build`: passed (both TypeScript configurations and Vite).
 - Browser smoke test with an in-memory database: temperature-only device selected the method by default; Polish form enabled/saved it; reload retained configuration; 21°C versus 22°C produced state `on` and positive estimated kWh.

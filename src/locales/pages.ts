@@ -1,6 +1,13 @@
 import type { Messages } from '../../shared/i18n';
 
 export const messages: Messages = {
+  'Use on your phone': 'Korzystaj na telefonie',
+  'iPhone: open the Share menu and choose Add to Home Screen. Android: open the browser menu and choose Install app or Add to Home Screen.':
+    'iPhone: otwórz menu Udostępnij i wybierz Do ekranu początkowego. Android: otwórz menu przeglądarki i wybierz Zainstaluj aplikację lub Dodaj do ekranu głównego.',
+  'Open the application over HTTPS to install it. Monitoring needs a connection to your server; readings are not available offline.':
+    'Otwórz aplikację przez HTTPS, aby ją zainstalować. Monitoring wymaga połączenia z Twoim serwerem; odczyty nie są dostępne offline.',
+  'Using this phone? Display the QR code on another screen, then scan it with Tuya or Smart Life on your phone.':
+    'Korzystasz z tego telefonu? Wyświetl kod QR na innym ekranie, a następnie zeskanuj go aplikacją Tuya lub Smart Life na telefonie.',
   'Tuya.ai meter': 'Licznik Tuya.ai',
   'kWh meter · QR': 'Licznik kWh · QR',
   'Measurement source: {source} · last reading: {date}':
@@ -40,6 +47,25 @@ export const messages: Messages = {
     'Suma jest częściowa. Obejmuje pomiary liczników, zużycie obliczone z mocy i włączone estymacje. Przerwy w odczytach oraz urządzenia bez źródła energii pozostają brakami danych.',
   'Apartment history': 'Historia mieszkania',
   Devices: 'Urządzenia',
+  'Choose which devices count toward the apartment total and alerts. Open a device to see its history.':
+    'Wybierz urządzenia uwzględniane w sumie mieszkania i alertach. Kliknij urządzenie, aby zobaczyć jego historię.',
+  Included: 'Wliczane',
+  Excluded: 'Pomijane',
+  Ignored: 'Ignorowane',
+  Ignore: 'Ignoruj',
+  Restore: 'Przywróć',
+  'Ignore {name}': 'Ignoruj {name}',
+  'Restore {name} to the device list': 'Przywróć {name} na listę urządzeń',
+  'Ignored devices ({count})': 'Ignorowane urządzenia ({count})',
+  'All devices are ignored': 'Wszystkie urządzenia są ignorowane',
+  'Expand the ignored devices below to restore one to the list.':
+    'Rozwiń poniższą listę ignorowanych urządzeń, aby przywrócić wybrane urządzenie.',
+  'Ignored devices are excluded from totals and alerts. Restoring a device keeps monitoring off until you enable it.':
+    'Ignorowane urządzenia nie są wliczane do sum i alertów. Po przywróceniu monitorowanie pozostaje wyłączone, dopóki go nie włączysz.',
+  'This device is ignored. Enabling monitoring also restores it to the device list.':
+    'To urządzenie jest ignorowane. Włączenie monitorowania przywróci je także na listę urządzeń.',
+  'Include {name} in apartment total and alert rules':
+    'Uwzględniaj {name} w sumie mieszkania i regułach alertów',
   'Select a device to view its history and contribution to the total.':
     'Wybierz urządzenie, aby sprawdzić historię i udział w sumie.',
   Device: 'Urządzenie',

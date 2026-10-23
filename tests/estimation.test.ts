@@ -233,12 +233,51 @@ test('v1 database migrates additively, preserves credentials/readings/intervals 
     old.close();
     for (let i = 0; i < 2; i++) {
       const db = openDatabase(path);
-      assert.equal((db.prepare('PRAGMA user_version').get() as any).user_version, 6);
+      assert.equal((db.prepare('PRAGMA user_version').get() as any).user_version, 7);
       assert.equal((db.prepare('SELECT secret FROM accounts').get() as any).secret, 'encrypted');
       const interval = db.prepare('SELECT * FROM intervals').get() as any;
       assert.equal(interval.source, 'measured');
       assert.equal(interval.kwh, 3);
       db.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('released v6 database gains temperature estimation without losing ignored devices or relay history', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tem-v6-temperature-'));
+  try {
+    const path = join(dir, 'db.sqlite');
+    const prior = new DatabaseSync(path);
+    prior.exec(readFileSync(new URL('./fixtures/schema-v6.sql', import.meta.url), 'utf8'));
+    prior.exec(`
+      INSERT INTO accounts(id,label,secret) VALUES('a','A','encrypted');
+      INSERT INTO homes(id,account_id,remote_id,name) VALUES('h','a','h','H');
+      INSERT INTO devices(id,home_id,remote_id,name,category,included,ignored,online,energy_kind,
+        estimate_enabled,rated_power_kw,heating_code,heating_on_values,heating_off_values,estimate_revision)
+      VALUES('d','h','d','D','wk',0,1,1,'unsupported',1,2,'work_state','["heating"]','["idle"]',3);
+      INSERT INTO intervals(device_id,start,end,kwh,source,on_ms,config_revision)
+        VALUES('d',100,200,1,'estimated',100,3);
+    `);
+    prior.close();
+    for (let i = 0; i < 2; i++) {
+      const db = openDatabase(path);
+      try {
+        assert.equal(db.prepare('PRAGMA user_version').get()!.user_version, 7);
+        assert.equal(db.prepare('SELECT secret FROM accounts').get()!.secret, 'encrypted');
+        const d = db.prepare('SELECT * FROM devices').get()!;
+        assert.equal(d.ignored, 1);
+        assert.equal(d.included, 0);
+        assert.equal(d.heating_code, 'work_state');
+        assert.equal(d.estimate_revision, 3);
+        assert.equal(d.temperature_config, null);
+        assert.equal(d.temperature_metadata, '{}');
+        assert.equal(db.prepare('SELECT kwh FROM intervals').get()!.kwh, 1);
+        assert.throws(() => db.exec('UPDATE devices SET included=1 WHERE ignored=1'));
+      } finally {
+        db.close();
+      }
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });

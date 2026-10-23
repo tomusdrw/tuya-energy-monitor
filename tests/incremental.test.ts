@@ -213,6 +213,7 @@ test('v2 migration preserves data and report deduplication survives database reo
       DROP TABLE energy_reports;
       ALTER TABLE devices DROP COLUMN incremental_since;
       ALTER TABLE devices DROP COLUMN energy_stream_at;
+      ALTER TABLE devices DROP COLUMN ignored;
       PRAGMA user_version=2`);
     f.db.close();
     db = openDatabase(path);

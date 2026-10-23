@@ -1,4 +1,6 @@
 export const componentMessages: Record<string, string> = {
+  'View daily readings': 'Zobacz odczyty dzienne',
+  'Time coverage: {coverage}': 'Pokrycie czasu: {coverage}',
   'From power: {energy} kWh': 'Z pomiaru mocy: {energy} kWh',
   '{count} from power · ': '{count} z pomiarem mocy · ',
   'Measured power × time': 'Zmierzona moc × czas',
