@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { browserPush } from './push';
 import {
   LayoutDashboard,
   Building2,
@@ -262,6 +263,11 @@ export default function App() {
 }
 
 function Shell({ onLogout }: { onLogout: () => void }) {
+  useEffect(() => {
+    void browserPush()
+      .reconcile()
+      .catch(() => {});
+  }, []);
   const { t, number } = useI18n(appMessages);
   const [route, setRoute] = useState(location.hash.slice(1));
   const [days, setDays] = useState(14),
@@ -292,7 +298,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
   const title = nav.find((n) => n.path === active)?.label ?? 'Overview';
   async function logout() {
     try {
-      await api('/auth/logout', 'POST', {});
+      await browserPush().logout();
       onLogout();
     } catch (e) {
       setMessage((e as Error).message);

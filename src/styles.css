@@ -2135,3 +2135,84 @@ summary {
     padding-inline: 0;
   }
 }
+
+.push-preferences {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+.push-fields,
+.push-categories {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 20px;
+}
+.push-fields label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.push-preferences fieldset {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.push-preferences legend {
+  padding: 0;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+.push-preferences .check-label,
+.push-email-switch .check-label {
+  min-height: 44px;
+  overflow-wrap: anywhere;
+}
+.push-preferences input[type='checkbox'],
+.push-email-switch input[type='checkbox'] {
+  flex: 0 0 auto;
+}
+.push-preferences > .button {
+  justify-self: start;
+}
+.push-settings > h3 {
+  margin-top: 28px;
+}
+.push-actions {
+  margin: 14px 0;
+}
+.push-receiver {
+  border-top: 1px solid var(--line);
+  padding: 18px 0;
+}
+.push-receiver-heading,
+.delivery-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.push-receiver-heading strong {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.push-receiver details {
+  margin: 12px 0;
+}
+.push-receiver summary {
+  min-height: 44px;
+  padding-block: 12px;
+  cursor: pointer;
+}
+.push-email-switch {
+  margin-bottom: 14px;
+}
+@media (max-width: 600px) {
+  .push-fields,
+  .push-categories {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .push-preferences > .button {
+    justify-self: stretch;
+  }
+}
