@@ -30,7 +30,7 @@ export interface NotificationEvent {
   members?: { subject: string; episode: string; direction: 'lost' | 'restored' }[];
 }
 export function enqueueNotification(db: DatabaseSync, event: NotificationEvent): void {
-  transaction(db, () => {
+  const insert = () => {
     if (db.prepare('SELECT id FROM notifications WHERE id=?').get(event.id)) return;
     const english = event.content('en');
     const status =
@@ -49,5 +49,7 @@ export function enqueueNotification(db: DatabaseSync, event: NotificationEvent):
         'INSERT INTO notification_conditions(event_id,subject,episode,direction) VALUES(?,?,?,?)',
       ).run(event.id, member.subject, member.episode, member.direction);
     enqueuePush(db, event);
-  });
+  };
+  if (db.isTransaction) insert();
+  else transaction(db, insert);
 }

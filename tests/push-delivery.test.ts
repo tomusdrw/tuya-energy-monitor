@@ -77,7 +77,7 @@ test('push retries freeze payloads, expire invalid endpoints and continue for he
     );
     const retry = rows(f).find((r) => r.status === 'retry');
     assert.ok(retry.next_attempt >= f.now + 600000);
-    await deliverPushPending(f.db, pushConfig, f.now + 600000, async (_sub, payload) => {
+    await deliverPushPending(f.db, pushConfig, retry.next_attempt, async (_sub, payload) => {
       payloads.push(payload);
     });
     assert.equal(payloads.length, 2);

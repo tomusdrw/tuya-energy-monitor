@@ -11,7 +11,7 @@ import { z, ZodError } from 'zod';
 import { openDatabase } from './db.js';
 import { encrypt, decrypt, digest } from './crypto.js';
 import { accounts, getOverview, getHome, getDevice, notifications, TIMEZONE } from './energy.js';
-import { emailConfigured, type Config } from './config.js';
+import { emailConfigured, pushConfigured, type Config } from './config.js';
 import { callTuya, sessionSchema, type TuyaCall, type TuyaSession } from './tuya.js';
 import { Collector } from './collector.js';
 import { TuyaStream } from './stream.js';
@@ -19,12 +19,19 @@ import { configureEstimation } from './estimation.js';
 import { evaluateNotifications, deliverPending } from './notifications.js';
 import { TuyaAiClient, safeAiError, type AiClient } from './tuya-ai.js';
 import { TuyaAiIntegration, AiConfigurationError } from './tuya-ai-integration.js';
+import { evaluateAvailability } from './availability.js';
+import { deliverPushPending, type PushSender } from './pushDelivery.js';
+import { registerPushRoutes } from './pushRoutes.js';
+import { findReceiver, PushInputError, revokeReceiver } from './pushSubscriptions.js';
+import { emailEnabled } from './notificationEvents.js';
+import { transaction } from './db.js';
 
 interface Dependencies {
   db?: DatabaseSync;
   background?: boolean;
   tuya?: TuyaCall;
   tuyaAi?: AiClient;
+  pushSender?: PushSender;
 }
 const rulesSchema = z
   .object({
@@ -53,6 +60,9 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
     { value: string } | undefined;
   if (prior?.value !== revision) {
     db.exec('DELETE FROM sessions');
+    db.exec(
+      "UPDATE push_receivers SET state='disabled',generation=generation+1; UPDATE push_deliveries SET status='cancelled' WHERE status IN ('pending','retry')",
+    );
     db.prepare(
       "INSERT INTO metadata(key,value) VALUES('auth_revision',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
     ).run(revision);
@@ -74,9 +84,24 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
     tuyaAi,
   );
   let delivery: Promise<void> | null = null;
+  let pushDelivery: Promise<void> | null = null;
+  let notificationTimer: NodeJS.Timeout | undefined;
+  let closing = false;
+  const startedAt = Date.now();
+  const wakePush = () => {
+    if (!closing && !pushDelivery)
+      pushDelivery = deliverPushPending(db, config, Date.now(), dependencies.pushSender)
+        .catch(() => {})
+        .finally(() => {
+          pushDelivery = null;
+        });
+  };
   collector.afterSync = async () => {
+    if (closing) return;
     const now = Date.now();
     evaluateNotifications(db, now);
+    evaluateAvailability(db, now, startedAt);
+    wakePush();
     // Keep one outbox owner, independently of the minute-by-minute collector.
     // Slow email responses must not turn healthy relay observations into gaps.
     if (!delivery)
@@ -136,6 +161,8 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
       return reply.code(401).send({ error: 'Sign in to continue.' });
   });
   app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof PushInputError)
+      return reply.code(error.statusCode).send({ error: error.message });
     if (error instanceof ZodError)
       return reply.code(400).send({
         error: 'Check the form values.',
@@ -171,7 +198,25 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
     },
   );
   app.post('/api/auth/logout', async (request, reply) => {
-    db.prepare('DELETE FROM sessions WHERE hash=?').run(digest(request.cookies.tem_session!));
+    const body = z
+      .object({
+        receiverId: z.string().uuid().optional(),
+        endpoint: z.string().max(2048).optional(),
+      })
+      .strict()
+      .parse(request.body ?? {});
+    transaction(db, () => {
+      const hash = digest(request.cookies.tem_session!);
+      const remembered = db.prepare('SELECT receiver_id FROM sessions WHERE hash=?').get(hash)
+        ?.receiver_id as string | null;
+      const ids = new Set([
+        remembered,
+        body.receiverId,
+        body.endpoint ? findReceiver(db, body.endpoint)?.id : null,
+      ]);
+      for (const id of ids) if (id) revokeReceiver(db, id);
+      db.prepare('DELETE FROM sessions WHERE hash=?').run(hash);
+    });
     reply.clearCookie('tem_session', cookieOptions);
     return { ok: true };
   });
@@ -311,12 +356,15 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
     }
   });
   app.get('/api/notifications', async () => notifications(db));
+  registerPushRoutes(app, db, config, wakePush);
   app.get('/api/settings', async () => ({
     timezone: TIMEZONE,
     pollSeconds: config.pollSeconds,
     statusPollSeconds: config.statusPollSeconds,
     origin: config.origin,
     emailConfigured: emailConfigured(config),
+    emailEnabled: emailEnabled(db),
+    pushConfigured: pushConfigured(config),
     emailFrom: config.emailFrom || null,
     emailTo: config.emailTo || null,
     syncing: collector.syncing,
@@ -407,6 +455,10 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
           `INSERT INTO accounts(id,label,identity,secret) VALUES(?,?,?,?)
         ON CONFLICT(identity) DO UPDATE SET label=excluded.label,secret=excluded.secret,error=NULL`,
         ).run(randomUUID(), flow.label, identity, encrypt(session, config.encryptionKey));
+        const connected = db.prepare('SELECT id FROM accounts WHERE identity=?').get(identity)!;
+        db.prepare(
+          'INSERT INTO metadata(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+        ).run(`connection-revision/${connected.id}`, randomUUID());
         flows.delete(request.params.id);
         void collector.sync().catch(() => {});
         return { ok: true };
@@ -420,18 +472,31 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
 
   const clientRoot = path.resolve('dist/client');
   if (existsSync(path.join(clientRoot, 'index.html'))) {
-    await app.register(staticFiles, { root: clientRoot, prefix: '/', index: 'index.html' });
+    await app.register(staticFiles, {
+      root: clientRoot,
+      prefix: '/',
+      index: 'index.html',
+      setHeaders: (response, file) => {
+        if (file.endsWith('/sw.js')) response.header('Cache-Control', 'no-cache');
+      },
+    });
   }
   app.setNotFoundHandler((_request, reply) => reply.code(404).send({ error: 'Page not found.' }));
   app.addHook('onClose', async () => {
+    closing = true;
+    clearInterval(notificationTimer);
     await collector.stop();
     await delivery; // The sender must finish before its database is closed.
+    await pushDelivery;
     flows.clear();
     db.close();
   });
   if (dependencies.background !== false)
     app.addHook('onReady', async () => {
       collector.start();
+      notificationTimer = setInterval(() => {
+        void collector.afterSync().catch(() => {});
+      }, 60000);
     });
   return app;
 }

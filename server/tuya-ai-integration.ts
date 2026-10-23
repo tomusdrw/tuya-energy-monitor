@@ -78,7 +78,7 @@ export class TuyaAiIntegration {
       this.db
         .prepare(
           `UPDATE accounts SET ai_secret=?,ai_revision=ai_revision+1,ai_region=?,
-        ai_last_success=NULL,ai_last_attempt=NULL,ai_error=NULL WHERE id=?`,
+        ai_last_success=NULL,ai_last_attempt=NULL,ai_error=NULL,ai_connectivity_at=NULL,ai_connectivity_ok=NULL,ai_connectivity_active=0 WHERE id=?`,
         )
         .run(encrypt(key, this.config.encryptionKey), region, accountId);
     });
@@ -91,7 +91,7 @@ export class TuyaAiIntegration {
       this.db
         .prepare(
           `UPDATE accounts SET ai_secret=NULL,ai_revision=ai_revision+1,ai_region=NULL,
-        ai_last_success=NULL,ai_last_attempt=NULL,ai_error=NULL WHERE id=?`,
+        ai_last_success=NULL,ai_last_attempt=NULL,ai_error=NULL,ai_connectivity_at=NULL,ai_connectivity_ok=NULL,ai_connectivity_active=0 WHERE id=?`,
         )
         .run(accountId);
     });
@@ -168,13 +168,30 @@ export class TuyaAiIntegration {
       let blocked: string | null = null;
       let key: string;
       let authorized = new Set<string>();
+      const dbConnectivity = (healthy: boolean) => {
+        this.db
+          .prepare(
+            'UPDATE accounts SET ai_connectivity_active=1,ai_connectivity_at=?,ai_connectivity_ok=? WHERE id=? AND ai_revision=?',
+          )
+          .run(this.clock(), Number(healthy), id, account.ai_revision);
+      };
       try {
         key = decrypt<string>(account.ai_secret, this.config.encryptionKey);
         apiRegion(key);
-        if (devices.length) authorized = new Set(await this.client.list(key));
+        if (devices.length) {
+          authorized = new Set(await this.client.list(key));
+          if (this.current(account)) dbConnectivity(true);
+        } else if (this.current(account)) {
+          this.db
+            .prepare(
+              'UPDATE accounts SET ai_connectivity_active=0,ai_connectivity_at=NULL,ai_connectivity_ok=NULL WHERE id=? AND ai_revision=?',
+            )
+            .run(id, account.ai_revision);
+        }
       } catch (failure) {
         key = '';
         blocked = safeAiError(failure);
+        if (this.current(account) && devices.length) dbConnectivity(false);
       }
       for (const device of devices) {
         if (!this.current(account)) break;
