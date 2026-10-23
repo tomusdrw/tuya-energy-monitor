@@ -281,6 +281,50 @@ test('estimation configuration is private, validates mappings and power, and nev
     assert.equal(detail.estimation.revision, 1, 'saving unchanged config keeps its baseline');
     assert.equal(detail.estimation.state, 'unknown');
     assert.equal((db.prepare('SELECT kwh FROM intervals').get() as any).kwh, 1);
+    const temperaturePayload = {
+      ...payload,
+      heatingCode: null,
+      onValues: [],
+      offValues: [],
+      temperature: {
+        current: { code: 'temp_current', scale: 1, unit: 'C' },
+        target: { code: 'set_temp', scale: 0, unit: 'C' },
+        switchCode: 'switch',
+      },
+    };
+    for (const change of [
+      { current: { code: 'temp_current', scale: -1, unit: 'C' } },
+      { current: { code: 'temp_current', scale: 1, unit: 'W' } },
+      { target: temperaturePayload.temperature.current },
+    ]) {
+      assert.equal(
+        (
+          await app.inject({
+            method: 'PUT',
+            url,
+            headers,
+            payload: {
+              ...temperaturePayload,
+              temperature: { ...temperaturePayload.temperature, ...change },
+            },
+          })
+        ).statusCode,
+        400,
+      );
+    }
+    assert.equal(
+      (await app.inject({ method: 'PUT', url, headers, payload: temperaturePayload })).statusCode,
+      200,
+    );
+    assert.equal(
+      (await app.inject({ method: 'PUT', url, headers, payload: temperaturePayload })).statusCode,
+      200,
+    );
+    const temperatureDetail = (await app.inject({ url: '/api/devices/d', headers })).json();
+    assert.deepEqual(temperatureDetail.estimation.temperature, temperaturePayload.temperature);
+    assert.equal(temperatureDetail.estimation.revision, 2);
+    assert.equal(temperatureDetail.energySource, 'estimated');
+    assert.equal((db.prepare('SELECT kwh FROM intervals').get() as any).kwh, 1);
     assert.equal(
       (await app.inject({ method: 'PUT', url: '/api/devices/absent/estimation', headers, payload }))
         .statusCode,

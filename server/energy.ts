@@ -20,6 +20,7 @@ import { powerFieldSchema, recordPower, hasFreshPower } from './power.js';
 import {
   recordHeatingState,
   statusFieldsSchema,
+  temperatureMetadataSchema,
   energySource,
   estimationView,
   currentHeatingState,
@@ -47,6 +48,7 @@ export const snapshotSchema = z.object({
           powerW: nullableNumber,
           powerField: powerFieldSchema.nullable().default(null),
           statusFields: statusFieldsSchema.default([]),
+          temperatureMetadata: temperatureMetadataSchema.optional(),
         }),
       ),
     }),
@@ -266,7 +268,14 @@ export function ingestSnapshot(
           );
         if (!keepAi) recordCounter(db, id, now, counter, device.energyCode, device.online);
         recordPower(db, id, device.statusFields, device.online, now);
-        recordHeatingState(db, id, device.statusFields, device.online, now);
+        recordHeatingState(
+          db,
+          id,
+          device.statusFields,
+          device.online,
+          now,
+          device.temperatureMetadata,
+        );
       }
     }
     // A disappeared device is a known gap, even if it returns before MAX_GAP.

@@ -27,7 +27,12 @@ export function estimationFixture(path = ':memory:', start = Date.parse('2026-10
     'Account',
     'encrypted',
   );
-  const snapshot = (at: number, counter: number | null = null, fields: any[] = []) =>
+  const snapshot = (
+    at: number,
+    counter: number | null = null,
+    fields: any[] = [],
+    temperatureMetadata?: unknown,
+  ) =>
     ingestSnapshot(
       db,
       'a',
@@ -48,6 +53,7 @@ export function estimationFixture(path = ':memory:', start = Date.parse('2026-10
                 temperature: 21,
                 powerW: null,
                 statusFields: fields,
+                temperatureMetadata,
               },
             ],
           },
@@ -227,12 +233,51 @@ test('v1 database migrates additively, preserves credentials/readings/intervals 
     old.close();
     for (let i = 0; i < 2; i++) {
       const db = openDatabase(path);
-      assert.equal((db.prepare('PRAGMA user_version').get() as any).user_version, 6);
+      assert.equal((db.prepare('PRAGMA user_version').get() as any).user_version, 7);
       assert.equal((db.prepare('SELECT secret FROM accounts').get() as any).secret, 'encrypted');
       const interval = db.prepare('SELECT * FROM intervals').get() as any;
       assert.equal(interval.source, 'measured');
       assert.equal(interval.kwh, 3);
       db.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('released v6 database gains temperature estimation without losing ignored devices or relay history', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tem-v6-temperature-'));
+  try {
+    const path = join(dir, 'db.sqlite');
+    const prior = new DatabaseSync(path);
+    prior.exec(readFileSync(new URL('./fixtures/schema-v6.sql', import.meta.url), 'utf8'));
+    prior.exec(`
+      INSERT INTO accounts(id,label,secret) VALUES('a','A','encrypted');
+      INSERT INTO homes(id,account_id,remote_id,name) VALUES('h','a','h','H');
+      INSERT INTO devices(id,home_id,remote_id,name,category,included,ignored,online,energy_kind,
+        estimate_enabled,rated_power_kw,heating_code,heating_on_values,heating_off_values,estimate_revision)
+      VALUES('d','h','d','D','wk',0,1,1,'unsupported',1,2,'work_state','["heating"]','["idle"]',3);
+      INSERT INTO intervals(device_id,start,end,kwh,source,on_ms,config_revision)
+        VALUES('d',100,200,1,'estimated',100,3);
+    `);
+    prior.close();
+    for (let i = 0; i < 2; i++) {
+      const db = openDatabase(path);
+      try {
+        assert.equal(db.prepare('PRAGMA user_version').get()!.user_version, 7);
+        assert.equal(db.prepare('SELECT secret FROM accounts').get()!.secret, 'encrypted');
+        const d = db.prepare('SELECT * FROM devices').get()!;
+        assert.equal(d.ignored, 1);
+        assert.equal(d.included, 0);
+        assert.equal(d.heating_code, 'work_state');
+        assert.equal(d.estimate_revision, 3);
+        assert.equal(d.temperature_config, null);
+        assert.equal(d.temperature_metadata, '{}');
+        assert.equal(db.prepare('SELECT kwh FROM intervals').get()!.kwh, 1);
+        assert.throws(() => db.exec('UPDATE devices SET included=1 WHERE ignored=1'));
+      } finally {
+        db.close();
+      }
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -344,6 +389,184 @@ test('empty enum metadata retains observed choices; a new declared range replace
       getDevice(f.db, f.id, f.start + 3 * minute)!.estimation.statusFields[0].values,
       ['heat', 'off'],
     );
+  } finally {
+    f.db.close();
+  }
+});
+
+const temperatureSettings = {
+  enabled: true,
+  ratedPowerKw: 2,
+  heatingCode: null,
+  onValues: [],
+  offValues: [],
+  temperature: {
+    current: { code: 'temp_current', scale: 1, unit: 'C' },
+    target: { code: 'set_temp', scale: 0, unit: 'C' },
+    switchCode: 'switch',
+  },
+};
+const temperatures = (current = 210, target = 22, power = true) => [
+  { code: 'temp_current', value: current },
+  { code: 'set_temp', value: target },
+  { code: 'switch', value: power },
+];
+
+test('temperature configuration and valid baseline survive restart, with no bridge over long gaps', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tem-temperature-'));
+  try {
+    const path = join(dir, 'db.sqlite');
+    const f = estimationFixture(path);
+    configureEstimation(f.db, f.id, temperatureSettings, f.start);
+    recordHeatingState(f.db, f.id, temperatures(), true, f.start + minute);
+    f.db.close();
+    const db = openDatabase(path);
+    try {
+      recordHeatingState(db, f.id, temperatures(), true, f.start + 2 * minute);
+      recordHeatingState(db, f.id, temperatures(), true, f.start + 6 * minute);
+      const detail = getDevice(db, f.id, f.start + 6 * minute)!;
+      assert.deepEqual(detail.estimation.temperature, temperatureSettings.temperature);
+      assert.equal(detail.estimation.state, 'on');
+      assert.equal(
+        usage(db, devicesFor(db), f.start, f.start + 6 * minute, f.start + 6 * minute).kwh,
+        0.033333,
+      );
+    } finally {
+      db.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('temperature-only thermostat records heating kWh, idle zero, and observations without a relay', () => {
+  const f = estimationFixture();
+  try {
+    configureEstimation(f.db, f.id, temperatureSettings, f.start);
+    for (let i = 1; i <= 31; i++) {
+      ingestHeatingSnapshot(
+        f.db,
+        'a',
+        [{ id: 'd', online: true, statusFields: temperatures(i === 31 ? 220 : 210) }],
+        ['d'],
+        f.start + i * minute,
+      );
+    }
+    const detail = getDevice(f.db, f.id, f.start + 31 * minute)!;
+    assert.equal(detail.estimation.state, 'off');
+    assert.equal(detail.energySource, 'estimated');
+    assert.equal(f.stats(f.start + 31 * minute).estimatedKwh, 1);
+    assert.deepEqual(detail.estimation.temperature, temperatureSettings.temperature);
+    recordHeatingState(f.db, f.id, temperatures(210, 22, false), true, f.start + 32 * minute);
+    assert.equal(f.stats(f.start + 32 * minute).estimatedKwh, 1);
+    assert.equal(getDevice(f.db, f.id, f.start + 32 * minute)!.estimation.state, 'off');
+  } finally {
+    f.db.close();
+  }
+});
+
+test('temperature discovery survives fast polls; stale metadata and missing samples never add usage', () => {
+  const f = estimationFixture();
+  try {
+    const full = temperatures().map((field) => ({
+      ...field,
+      ...(field.code === 'temp_current'
+        ? { temperature: { scale: 1, unit: 'C' } }
+        : field.code === 'set_temp'
+          ? { temperature: { scale: 0, unit: 'C' } }
+          : {}),
+    }));
+    f.snapshot(f.start + minute, null, full);
+    const discovered = getDevice(f.db, f.id, f.start + minute)!.estimation;
+    assert.deepEqual(discovered.temperatureSuggestion, temperatureSettings.temperature);
+    assert.equal(discovered.enabled, false);
+    configureEstimation(f.db, f.id, temperatureSettings, f.start + minute);
+    recordHeatingState(f.db, f.id, temperatures(), true, f.start + 2 * minute);
+    assert.deepEqual(
+      getDevice(f.db, f.id, f.start + 2 * minute)!.estimation.temperatureSuggestion,
+      temperatureSettings.temperature,
+    );
+    recordHeatingState(f.db, f.id, [], true, f.start + 3 * minute);
+    recordHeatingState(f.db, f.id, temperatures(), true, f.start + 4 * minute);
+    recordHeatingState(f.db, f.id, temperatures(), false, f.start + 5 * minute);
+    recordHeatingState(f.db, f.id, temperatures(), true, f.start + 6 * minute);
+    const changed = full.map((f) => (f.code === 'temp_current' ? { ...f, temperature: null } : f));
+    f.snapshot(f.start + 7 * minute, null, changed);
+    recordHeatingState(f.db, f.id, [], true, f.start + 8 * minute);
+    recordHeatingState(f.db, f.id, temperatures(), true, f.start + 9 * minute);
+    recordHeatingState(f.db, f.id, temperatures(), true, f.start + 10 * minute);
+    assert.equal(getDevice(f.db, f.id, f.start + 10 * minute)!.estimation.state, 'unknown');
+    assert.equal(f.stats(f.start + 10 * minute).kwh, null);
+  } finally {
+    f.db.close();
+  }
+});
+
+test('temperature mappings validate distinct fields, preserve old estimates and yield to native meters', () => {
+  const f = estimationFixture();
+  try {
+    assert.throws(() =>
+      configureEstimation(
+        f.db,
+        f.id,
+        {
+          ...temperatureSettings,
+          temperature: {
+            ...temperatureSettings.temperature,
+            target: temperatureSettings.temperature.current,
+          },
+        },
+        f.start,
+      ),
+    );
+    assert.throws(() =>
+      configureEstimation(
+        f.db,
+        f.id,
+        {
+          ...temperatureSettings,
+          heatingCode: 'work_state',
+          onValues: ['heating'],
+          offValues: ['idle'],
+        },
+        f.start,
+      ),
+    );
+    configureEstimation(f.db, f.id, settings, f.start);
+    f.sample(f.start + minute);
+    f.sample(f.start + 2 * minute);
+    configureEstimation(f.db, f.id, temperatureSettings, f.start + 2.5 * minute);
+    recordHeatingState(f.db, f.id, temperatures(), true, f.start + 3 * minute);
+    assert.equal(f.stats(f.start + 3 * minute).kwh, 0.033333);
+    recordHeatingState(f.db, f.id, temperatures(), true, f.start + 4 * minute);
+    assert.equal(f.stats(f.start + 4 * minute).kwh, 0.066667);
+    f.snapshot(f.start + 5 * minute, 100, temperatures());
+    f.snapshot(f.start + 6 * minute, 101, temperatures());
+    assert.equal(f.stats(f.start + 6 * minute).kwh, 1.066667);
+    assert.equal(getDevice(f.db, f.id, f.start + 6 * minute)!.energySource, 'measured');
+  } finally {
+    f.db.close();
+  }
+});
+
+test('full discovery invalidates changed temperature metadata even when its current reading is absent', () => {
+  const f = estimationFixture();
+  try {
+    configureEstimation(f.db, f.id, temperatureSettings, f.start);
+    recordHeatingState(f.db, f.id, temperatures(), true, f.start + minute);
+    f.snapshot(
+      f.start + 2 * minute,
+      null,
+      temperatures().filter((f) => f.code !== 'temp_current'),
+      {
+        temp_current: { scale: 0, unit: 'C' },
+        set_temp: { scale: 0, unit: 'C' },
+      },
+    );
+    recordHeatingState(f.db, f.id, temperatures(23), true, f.start + 3 * minute);
+    recordHeatingState(f.db, f.id, temperatures(23), true, f.start + 4 * minute);
+    assert.equal(getDevice(f.db, f.id, f.start + 4 * minute)!.estimation.state, 'unknown');
+    assert.equal(f.stats(f.start + 4 * minute).kwh, null);
   } finally {
     f.db.close();
   }

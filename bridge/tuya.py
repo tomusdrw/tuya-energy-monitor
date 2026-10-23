@@ -10,7 +10,29 @@ from urllib.parse import urlsplit
 CLIENT_ID = 'HA_3y9q4ak7g4ephrvke'
 ENERGY_POLICY = json.loads((Path(__file__).resolve().parent.parent / 'shared/energy-policy.json').read_text())
 CUMULATIVE_CODES = set(ENERGY_POLICY['cumulativeCodes'])
+TEMPERATURE_CODES = ('temp_current', 'current_temp', 'temp_set', 'set_temp',
+                     'temp_current_f', 'current_temp_f', 'temp_set_f', 'set_temp_f')
 
+
+def temperature_metadata(specification):
+    definitions = {field['code']: field for field in
+                   specification.get('functions', []) + specification.get('status', [])}
+    result = dict.fromkeys(TEMPERATURE_CODES)
+    for code in TEMPERATURE_CODES:
+        definition = definitions.get(code, {})
+        try:
+            meta = definition.get('values', {})
+            if isinstance(meta, str):
+                meta = json.loads(meta)
+            scale = meta.get('scale')
+            unit = str(meta.get('unit', '')).strip().lower()
+            units = {'℃': 'C', '°c': 'C', 'c': 'C', '℉': 'F', '°f': 'F', 'f': 'F'}
+            if (definition.get('type', '').lower() in ('integer', 'value')
+                    and type(scale) is int and 0 <= scale <= 9 and unit in units):
+                result[code] = {'scale': scale, 'unit': units[unit]}
+        except (ValueError, TypeError, AttributeError):
+            pass
+    return result
 
 
 def status_fields(device, specification):
@@ -18,6 +40,7 @@ def status_fields(device, specification):
     # Some devices describe an exposed status only in the functions list.
     definitions = {field['code']: field for field in
                    specification.get('functions', []) + specification.get('status', [])}
+    temperatures = temperature_metadata(specification) if specification else {}
     result = []
     def safe(value):
         return (isinstance(value, bool) or
@@ -33,6 +56,10 @@ def status_fields(device, specification):
         if kind and kind not in ('boolean', 'bool', 'enum', 'integer', 'value'):
             continue
         normalized = {'code': code, 'value': value}
+        if code in temperatures:
+            # Preserve raw values; metadata lets the server compare independent scales.
+            # Explicit null distinguishes invalid full discovery from a fast status read.
+            normalized['temperature'] = temperatures[code]
         if kind in ('boolean', 'bool') or not kind and isinstance(value, bool):
             normalized['values'] = [True, False]
         if kind == 'enum':
@@ -104,6 +131,7 @@ def normalize_device(device, specification, reports):
               'category': device.get('category', ''), 'online': bool(device.get('online')),
               'energyCode': None, 'counterKwh': None, 'incrementKwh': None, 'energyKind': 'unsupported',
               'temperature': None, 'powerW': watts, 'powerField': power_field,
+              'temperatureMetadata': temperature_metadata(specification),
               'statusFields': status_fields(device, specification)}
     for field in specification.get('status', []):
         code = field['code']

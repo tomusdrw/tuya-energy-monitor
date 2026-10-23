@@ -89,10 +89,21 @@ export interface DeviceDetail extends DeviceView {
   estimation: EstimationView;
 }
 export type StatusValue = string | number | boolean;
+export interface TemperatureField {
+  code: string;
+  scale: number;
+  unit: 'C' | 'F';
+}
+export interface TemperatureMapping {
+  current: TemperatureField;
+  target: TemperatureField;
+  switchCode: string | null;
+}
 export interface StatusField {
   code: string;
   value: StatusValue;
   values?: StatusValue[];
+  temperature?: Omit<TemperatureField, 'code'> | null;
 }
 export interface EstimationConfig {
   enabled: boolean;
@@ -100,6 +111,7 @@ export interface EstimationConfig {
   heatingCode: string | null;
   onValues: StatusValue[];
   offValues: StatusValue[];
+  temperature?: TemperatureMapping | null;
 }
 export interface EstimationView extends EstimationConfig {
   revision: number;
@@ -110,6 +122,7 @@ export interface EstimationView extends EstimationConfig {
   totalHeatingHours: number | null;
   statusFields: StatusField[];
   suggestion: Pick<EstimationConfig, 'heatingCode' | 'onValues' | 'offValues'> | null;
+  temperatureSuggestion: TemperatureMapping | null;
   observations: {
     at: number;
     state: DeviceView['heatingState'];

@@ -96,6 +96,39 @@ test('estimation uses the selected language and number format while preserving r
     assert.match(saved, /<option value="custom_relay" selected=""/);
     assert.ok(saved.includes('The selected field is absent from the latest reading.'));
     assert.match(saved, /<select[^>]*name="state-2"/);
+    device.estimation.heatingCode = null;
+    device.estimation.onValues = [];
+    device.estimation.offValues = [];
+    device.estimation.suggestion = null;
+    device.estimation.statusFields = [
+      { code: 'temp_current', value: 210, temperature: { scale: 1, unit: 'C' } },
+      { code: 'set_temp', value: 22, temperature: { scale: 0, unit: 'C' } },
+      { code: 'switch', value: true },
+    ];
+    device.estimation.temperatureSuggestion = {
+      current: { code: 'temp_current', scale: 1, unit: 'C' },
+      target: { code: 'set_temp', scale: 0, unit: 'C' },
+      switchCode: 'switch',
+    };
+    for (const language of ['en', 'pl'] as const) {
+      const temperatureHtml = renderToStaticMarkup(
+        createElement(LanguageProvider, {
+          initialLanguage: language,
+          children: createElement(EstimationForm, { device, onSaved: () => {} }),
+        }),
+      );
+      assert.match(temperatureHtml, /<option value="temperature" selected=""/);
+      assert.match(temperatureHtml, /type="checkbox"(?! disabled)/);
+      assert.doesNotMatch(temperatureHtml, /name="state-0"/);
+      assert.ok(
+        temperatureHtml.includes(
+          language === 'en' ? 'Temperature comparison' : 'Porównanie temperatur',
+        ),
+      );
+      assert.ok(temperatureHtml.includes('21'));
+      assert.ok(temperatureHtml.includes('22'));
+      assert.ok(!temperatureHtml.includes('checked=""'));
+    }
   } finally {
     db.close();
   }

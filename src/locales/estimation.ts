@@ -1,6 +1,20 @@
 import type { Messages } from '../../shared/i18n';
 
 export const messages: Messages = {
+  'Estimation method': 'Metoda estymacji',
+  'Heating signal': 'Sygnał grzania',
+  'Temperature comparison': 'Porównanie temperatur',
+  'Current temperature': 'Temperatura aktualna',
+  'Target temperature': 'Temperatura zadana',
+  'Use detected temperatures': 'Użyj wykrytych temperatur',
+  'Heating is estimated when the current temperature is below the target; at or above the target it is idle. An off thermostat is idle. Missing readings remain unknown. Thermostat hysteresis and heating schedules can make actual heating differ.':
+    'Szacujemy grzanie, gdy temperatura aktualna jest niższa od zadanej; przy zadanej lub powyżej — postój. Wyłączony termostat oznacza postój. Brak odczytów oznacza stan nieznany. Histereza i harmonogramy termostatu mogą powodować różnice względem faktycznej pracy ogrzewania.',
+  'No current and target temperature fields with known units and scales were found. Detect again to refresh the device data.':
+    'Nie wykryto temperatury aktualnej i zadanej o znanych jednostkach i skalach. Użyj „Wykryj ponownie”, aby odświeżyć dane urządzenia.',
+  'Select a field that reports heating, or choose temperature comparison when current and target temperatures are available.':
+    'Wybierz pole pokazujące grzanie albo porównanie temperatur, jeśli dostępne są temperatura aktualna i zadana.',
+  'No current, valid heating data. This period remains missing data even when the thermostat is online.':
+    'Brak aktualnych, poprawnych danych o grzaniu. Ten okres pozostaje bez danych, nawet gdy termostat jest online.',
   'Energy from measured power': 'Energia z pomiaru mocy',
   'Energy is calculated automatically from the device’s measured power. No rated power or heating signal configuration is needed.':
     'Energia jest obliczana automatycznie z mocy mierzonej przez urządzenie. Nie trzeba podawać mocy znamionowej ani konfigurować sygnału grzania.',

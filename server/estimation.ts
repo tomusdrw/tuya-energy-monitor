@@ -4,16 +4,38 @@ import { transaction } from './db.js';
 import type { EstimationConfig, EstimationView, StatusField } from '../shared/types.js';
 import { statusChoices, suggestHeatingMapping } from '../shared/estimation.js';
 import { recordPower } from './power.js';
+import { suggestTemperatureMapping, temperatureHeatingState } from '../shared/temperature.js';
 
 export const MAX_HEATING_GAP = 180000;
 const scalar = z.union([z.boolean(), z.number().finite(), z.string().max(100)]);
 const code = z.string().regex(/^[A-Za-z0-9_]{1,100}$/);
+const temperatureMetadata = z.object({
+  scale: z.number().int().min(0).max(9),
+  unit: z.enum(['C', 'F']),
+});
+export const temperatureMetadataSchema = z.record(code, temperatureMetadata.nullable());
+const temperatureField = temperatureMetadata.extend({ code });
+const temperatureMapping = z
+  .object({
+    current: temperatureField,
+    target: temperatureField,
+    switchCode: code.nullable(),
+  })
+  .strict()
+  .refine(
+    (v) =>
+      v.current.code !== v.target.code &&
+      v.switchCode !== v.current.code &&
+      v.switchCode !== v.target.code,
+    'Temperature and switch fields must be distinct.',
+  );
 export const statusFieldsSchema = z
   .array(
     z.object({
       code,
       value: scalar,
       values: z.array(scalar).max(100).optional(),
+      temperature: temperatureMetadata.nullable().optional(),
     }),
   )
   .max(256);
@@ -24,12 +46,14 @@ export const estimationSchema = z
     heatingCode: code.nullable(),
     onValues: z.array(scalar).max(100),
     offValues: z.array(scalar).max(100),
+    temperature: temperatureMapping.nullable().default(null),
   })
   .strict()
   .superRefine((v, ctx) => {
     if (
       v.enabled &&
-      (!v.ratedPowerKw || !v.heatingCode || !v.onValues.length || !v.offValues.length)
+      (!v.ratedPowerKw ||
+        (!v.temperature && (!v.heatingCode || !v.onValues.length || !v.offValues.length)))
     )
       ctx.addIssue({
         code: 'custom',
@@ -37,6 +61,11 @@ export const estimationSchema = z
       });
     if (v.onValues.some((on) => v.offValues.some((off) => off === on)))
       ctx.addIssue({ code: 'custom', message: 'Heating and idle values must not overlap.' });
+    if (v.temperature && (v.heatingCode || v.onValues.length || v.offValues.length))
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Choose temperature comparison or a heating signal.',
+      });
   });
 type Row = Record<string, any>;
 const round = (value: number) => Math.round(value * 1e6) / 1e6;
@@ -48,12 +77,15 @@ export function estimationConfig(d: Row): EstimationConfig {
     heatingCode: d.heating_code,
     onValues: JSON.parse(d.heating_on_values),
     offValues: JSON.parse(d.heating_off_values),
+    temperature: d.temperature_config ? JSON.parse(d.temperature_config) : null,
   };
 }
 export function energySource(d: Row): 'measured' | 'power' | 'estimated' | 'missing' {
   if (d.energy_kind === 'cumulative' || d.energy_kind === 'incremental') return 'measured';
   if (d.energy_kind === 'power') return 'power';
-  return d.estimate_enabled && d.rated_power_kw > 0 && d.heating_code ? 'estimated' : 'missing';
+  return d.estimate_enabled && d.rated_power_kw > 0 && (d.heating_code || d.temperature_config)
+    ? 'estimated'
+    : 'missing';
 }
 
 export function configureEstimation(
@@ -69,13 +101,14 @@ export function configureEstimation(
     if (JSON.stringify(config) === JSON.stringify(estimationConfig(device))) return true;
     db.prepare(
       `UPDATE devices SET estimate_enabled=?,rated_power_kw=?,heating_code=?,
-      heating_on_values=?,heating_off_values=?,estimate_revision=estimate_revision+1 WHERE id=?`,
+      heating_on_values=?,heating_off_values=?,temperature_config=?,estimate_revision=estimate_revision+1 WHERE id=?`,
     ).run(
       Number(config.enabled),
       config.ratedPowerKw,
       config.heatingCode,
       JSON.stringify(config.onValues),
       JSON.stringify(config.offValues),
+      config.temperature ? JSON.stringify(config.temperature) : null,
       id,
     );
     // Configuration is not an observation. A persisted unknown barrier also prevents
@@ -104,9 +137,10 @@ export function recordHeatingState(
   input: unknown,
   online: boolean,
   now: number,
+  discoveredTemperatures?: Record<string, StatusField['temperature']>,
 ): void {
   if (!db.isTransaction) {
-    transaction(db, () => recordHeatingState(db, id, input, online, now));
+    transaction(db, () => recordHeatingState(db, id, input, online, now, discoveredTemperatures));
     return;
   }
   let fields = statusFieldsSchema.parse(input);
@@ -117,7 +151,11 @@ export function recordHeatingState(
     .get(id) as Row | undefined;
   if (previous && now <= previous.at) return;
   const oldFields: StatusField[] = JSON.parse(d.status_fields);
+  // Persist only definitions across omitted fields, never their old readings.
+  const metadata: Record<string, StatusField['temperature']> =
+    discoveredTemperatures ?? JSON.parse(d.temperature_metadata);
   fields = fields.map((field) => {
+    if (field.temperature !== undefined) metadata[field.code] = field.temperature;
     const old = oldFields.find(
       (prior) => prior.code === field.code && typeof prior.value === typeof field.value,
     );
@@ -125,28 +163,37 @@ export function recordHeatingState(
     // fast reads retain observed choices, but never retain an absent current field.
     return {
       ...field,
+      ...(metadata[field.code] !== undefined ? { temperature: metadata[field.code] } : {}),
       values: statusChoices({
         ...field,
         values: field.values?.length ? field.values : old ? statusChoices(old) : [],
       }).slice(-100),
     };
   });
-  db.prepare('UPDATE devices SET status_fields=?,status_updated_at=? WHERE id=?').run(
-    JSON.stringify(fields),
-    now,
-    id,
-  );
+  db.prepare(
+    'UPDATE devices SET status_fields=?,status_updated_at=?,temperature_metadata=? WHERE id=?',
+  ).run(JSON.stringify(fields), now, JSON.stringify(metadata), id);
   if (!d.estimate_enabled) return;
   const source = energySource(d);
-  const raw = fields.find((f) => f.code === d.heating_code)?.value;
   const config = estimationConfig(d);
+  const raw = config.temperature
+    ? JSON.stringify({
+        current: fields.find((f) => f.code === config.temperature!.current.code)?.value ?? null,
+        target: fields.find((f) => f.code === config.temperature!.target.code)?.value ?? null,
+        switch: config.temperature.switchCode
+          ? (fields.find((f) => f.code === config.temperature!.switchCode)?.value ?? null)
+          : null,
+      })
+    : fields.find((f) => f.code === d.heating_code)?.value;
   const heating =
-    online && d.present && source === 'estimated' && raw !== undefined
-      ? config.onValues.includes(raw)
-        ? 1
-        : config.offValues.includes(raw)
-          ? 0
-          : null
+    online && d.present && source === 'estimated'
+      ? config.temperature
+        ? temperatureHeatingState(fields, config.temperature)
+        : raw !== undefined && config.onValues.includes(raw)
+          ? 1
+          : raw !== undefined && config.offValues.includes(raw)
+            ? 0
+            : null
       : null;
   const elapsed = previous ? now - previous.at : 0;
   if (
@@ -181,7 +228,7 @@ export function recordHeatingState(
     now,
     heating,
     raw === undefined ? null : JSON.stringify(raw),
-    d.heating_code,
+    config.temperature ? 'temperature_comparison' : d.heating_code,
     Number(online),
     source,
     d.estimate_revision,
@@ -273,6 +320,7 @@ export function estimationView(db: DatabaseSync, d: Row, now: number): Estimatio
     totalHeatingHours: total.ms === null ? null : round(total.ms / 3600000),
     statusFields: fields,
     suggestion,
+    temperatureSuggestion: suggestTemperatureMapping(fields),
     observations: rows.map((r) => ({
       at: r.at,
       state: r.heating === null ? 'unknown' : r.heating ? 'on' : 'off',

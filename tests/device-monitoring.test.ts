@@ -211,12 +211,14 @@ test('v5 migration preserves selections, energy and Tuya.ai configuration and pe
         .some((c) => c.name === 'ignored')
     )
       prior.exec('ALTER TABLE devices DROP COLUMN ignored');
+    prior.exec('ALTER TABLE devices DROP COLUMN temperature_config');
+    prior.exec('ALTER TABLE devices DROP COLUMN temperature_metadata');
     prior.exec('PRAGMA user_version=5');
     prior.close();
 
     const migrated = openDatabase(path);
     try {
-      assert.equal(migrated.prepare('PRAGMA user_version').get()?.user_version, 6);
+      assert.equal(migrated.prepare('PRAGMA user_version').get()?.user_version, 7);
       const home = getHome(migrated, f.homeId, f.now + 1)!;
       assert.equal(home.devices.find((d) => d.id === f.id)?.included, true);
       assert.equal(home.devices.find((d) => d.name === 'Sensor')?.included, false);
