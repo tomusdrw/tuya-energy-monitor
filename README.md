@@ -8,7 +8,7 @@ Tuya and Smart Life accounts, homes, and devices.
 The application includes an English-default dashboard with an English/Polish
 language switch, password login,
 apartment/device drill-down, history, individual thresholds, anomaly detection
-and Resend notifications. Energy support depends on what each device exposes
+and email/Web Push notifications. Energy support depends on what each device exposes
 through Tuya's sharing API or the optional per-account Tuya.ai integration.
 Unsupported devices remain visible as missing data.
 The application never controls heaters or changes their settings.
@@ -43,8 +43,8 @@ name, home-screen icons and standalone launch. Installation requires HTTPS on a
 phone; a plain HTTP LAN/Tailscale IP does not meet that requirement. Localhost is
 allowed for development. See the [browser installation requirements](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable).
 
-Monitoring still needs a connection to the server. There is no offline cache or
-service worker, and private readings and credentials are not cached for offline
+Monitoring still needs a connection to the server. A push-only service worker
+displays notifications; it does not cache pages, readings or credentials for offline
 use. A missing connection is not a zero-energy reading.
 
 On small screens, the bottom navigation opens the overview, apartments, accounts,
@@ -376,8 +376,11 @@ Tuya's [device message format](https://developer.tuya.com/en/docs/iot/message-ty
 ## Alerts and weekly summaries
 
 Configure `RESEND_API_KEY`, `EMAIL_FROM` (on a domain verified with Resend) and
-`EMAIL_TO`, then restart. With no email configuration, detected events remain
-visible in **Notifications** and nothing is sent.
+`EMAIL_TO`, then restart. Detected events remain visible in **Notifications**
+independently of delivery channels. **Settings → Email notifications enabled**
+controls email for the whole instance; push settings are independent. Disabling
+email cancels queued attempts and skips new emails; enabling it again does not
+replay skipped messages. Requests already in flight cannot be recalled.
 
 Daily threshold alerts evaluate after collection and are limited to one per
 apartment per Warsaw date. Partial sums may trigger a threshold and are clearly
@@ -404,6 +407,71 @@ the same Resend idempotency key on retries. Automatic retries stop after 23 hour
 in Resend. Definitive API rejections are marked failed. Unsent messages older
 than 24 hours expire instead of flooding the inbox when email is first enabled.
 New alerts use corrected configuration after restart.
+
+### PWA and desktop push
+
+1. Serve the application over HTTPS (localhost also works for development).
+2. Generate a VAPID key pair once with `npm run push:keys`. In a built Docker image,
+   use `docker compose run --rm --no-deps monitor node dist/scripts/push-keys.js`.
+3. Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` on the server.
+   Use a real operator contact such as `mailto:you@your-domain.com`; keep the
+   private key secret and retain the same pair across restarts/deployments.
+4. Restart, sign in and open **Settings → Notifications on this device**. Choose
+   its name, notification language and categories, then **Enable notifications**
+   and grant browser permission. Use **Send test notification** to check delivery.
+
+No Resend configuration or separate notification-service account is needed.
+Web Push uses the browser vendor's push infrastructure. The server needs outbound
+HTTPS to the subscribed provider; supported destinations include Google FCM,
+Mozilla Autopush, Apple Push and Windows notification servers. Subscription
+destinations are validated, resolved addresses must be public, and redirects are
+not followed. Subscription secrets are encrypted in SQLite and never returned in
+the receiver list. Back up both application encryption and VAPID keys.
+
+Each browser profile or PWA subscription is a separate receiver with independently
+saved categories and language. Browser/PWA windows sharing a subscription share
+its settings. Available categories are daily threshold, unusual usage, weekly
+summary, lost/restored energy readings and Tuya connection problem/restored.
+All are initially selected except the weekly summary; the selection is shown
+before enabling. These choices cover all monitored apartments. Other receivers
+can be renamed, edited or disabled from settings; enablement happens on the
+receiving device. New receivers/categories do not receive historical events.
+
+On iPhone/iPad, install the app on the Home Screen and open it there before
+enabling push ([WebKit requirements](https://webkit.org/blog/13878/)). Notifications
+can arrive while the app's page is closed, subject to browser/OS permissions,
+background settings, Focus modes and connectivity. Denied permissions must be
+changed in browser/system settings. Explicit logout disables this receiver;
+natural login-session expiry preserves opt-in. Changing the owner password
+revokes all receivers. Rotating VAPID keys requires enabling notifications again.
+
+Operational alerts use existing observations, without extra Tuya requests. A loss
+must persist for 15 minutes after detection, and recovery for 5 minutes. These
+grace periods are in addition to source freshness limits (15 minutes for counters,
+3 minutes for power/runtime estimates). Only selected energy devices that have
+had usable readings participate. Climate-only sensors and unconfigured/never-read
+energy devices do not create loss alerts. No incremental energy report can simply
+mean zero consumption; stream heartbeats determine connection availability.
+Device transitions confirmed together are grouped per apartment. Account outages
+suppress new corresponding device-loss cascades. Tuya.ai account connectivity uses
+its account-list request, independently of individual offline devices; an idle
+integration with no eligible devices does not count as a connection failure.
+
+Operational events stay in history and go only to opted-in push receivers, not
+email. Outbox rows and episode state survive restarts. Fully superseded pending
+operational messages are cancelled; partially recovered groups retain their
+timestamped historical snapshot. A one-minute notification job and independent
+push/email senders prevent slow delivery from blocking measurement collection.
+A stopped server cannot detect/send its own outage.
+
+Push retries are bounded to one hour for operational notices and 24 hours for
+energy/weekly events; test messages expire after five minutes. Expired browser
+subscriptions are disabled automatically. History's **Submitted** means the push
+service accepted the message, not that it was displayed or read. A crash after
+acceptance can cause a retry; stable notification tags/topics reduce duplicates.
+Messages already accepted by a provider cannot be reliably recalled after logout,
+revocation or recovery. The service worker opens the relevant authenticated app
+screen when a notification is clicked.
 
 ## Development
 
