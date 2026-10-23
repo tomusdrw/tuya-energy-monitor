@@ -5,6 +5,7 @@ import { api } from './api';
 import { Badge, Empty, Notice } from './components';
 import { useI18n } from './i18n';
 import { messages } from './locales/pages';
+import { DeviceClimate } from './Climate';
 
 type MovedDevice = { id: string; ignored: boolean; previousFocus: Element | null };
 type OnSaved = (moved?: MovedDevice) => void;
@@ -52,6 +53,7 @@ function DeviceRow({ device: d, onSaved }: { device: DeviceView; onSaved: OnSave
                 <> · {t('Excluded from apartment total')}</>
               ) : null}
             </small>
+            <DeviceClimate device={d} />
           </div>
         </div>
         <span className="device-source">

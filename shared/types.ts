@@ -65,10 +65,28 @@ export interface DeviceView {
   measurementAt: number | null;
   measurementError: string | null;
   temperature: number | null;
+  humidity: number | null;
+  climateObservedAt: number | null;
   powerW: number | null;
   stats: EnergyStats;
   energySource: 'measured' | 'power' | 'estimated' | 'missing';
   heatingState: 'on' | 'off' | 'unknown';
+}
+export interface ClimateMetric {
+  average: number | null;
+  minimum: number | null;
+  maximum: number | null;
+  count: number;
+  samples: number;
+  oldestObservedAt: number | null;
+  latestObservedAt: number | null;
+}
+export interface ClimateSummary {
+  temperature: ClimateMetric;
+  humidity: ClimateMetric;
+}
+export interface ClimateHistoryPoint extends ClimateSummary {
+  day: string;
 }
 export interface HomeView {
   id: string;
@@ -78,10 +96,12 @@ export interface HomeView {
   rules: Rules;
   stats: EnergyStats;
   deviceCount: number;
+  climate: ClimateSummary;
 }
 export interface HomeDetail extends HomeView {
   devices: DeviceView[];
   history: HistoryPoint[];
+  climateHistory: ClimateHistoryPoint[];
 }
 export interface DeviceDetail extends DeviceView {
   homeName: string;

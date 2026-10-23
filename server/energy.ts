@@ -17,6 +17,7 @@ import { scopedId } from './crypto.js';
 import { transaction } from './db.js';
 import { STREAM_FRESHNESS } from './incremental.js';
 import { powerFieldSchema, recordPower, hasFreshPower } from './power.js';
+import { climateReading, currentClimate, climateForPeriod } from './climate.js';
 import {
   recordHeatingState,
   statusFieldsSchema,
@@ -45,6 +46,7 @@ export const snapshotSchema = z.object({
           counterKwh: z.number().finite().nonnegative().nullable(),
           energyKind: z.enum(['cumulative', 'incremental', 'power', 'unsupported']),
           temperature: nullableNumber,
+          humidity: z.number().finite().min(0).max(100).nullable().default(null),
           powerW: nullableNumber,
           powerField: powerFieldSchema.nullable().default(null),
           statusFields: statusFieldsSchema.default([]),
@@ -239,6 +241,19 @@ export function ingestSnapshot(
           device.temperature,
           device.powerW,
         );
+        const temperature = device.online ? device.temperature : null;
+        const humidity = device.online ? device.humidity : null;
+        db.prepare('UPDATE devices SET temperature=?,humidity=?,climate_at=? WHERE id=?').run(
+          temperature,
+          humidity,
+          now,
+          id,
+        );
+        if (temperature !== null || humidity !== null)
+          db.prepare(
+            `INSERT OR IGNORE INTO climate_observations(device_id,home_id,at,temperature,humidity)
+            VALUES(?,?,?,?,?)`,
+          ).run(id, homeId, now, temperature, humidity);
         db.prepare('UPDATE devices SET qr_energy_kind=?,qr_energy_code=? WHERE id=?').run(
           device.energyKind,
           device.energyCode,
@@ -504,6 +519,7 @@ function homeView(db: DatabaseSync, home: Row, now: number): HomeView {
     },
     stats: usage(db, devices, dayBounds(localDate(now)).start, now, now),
     deviceCount: devices.length,
+    climate: currentClimate(devices, now),
   };
 }
 
@@ -537,7 +553,7 @@ function deviceView(db: DatabaseSync, d: Row, now: number): DeviceView {
     measurementProvider: energySource(d) === 'measured' ? d.measurement_provider : null,
     measurementAt: d.measurement_at,
     measurementError: d.measurement_error,
-    temperature: d.temperature,
+    ...climateReading(d, now),
     powerW: d.power_field ? (hasFreshPower(d, now) ? d.power_w : null) : d.power_w,
     energySource: energySource(d),
     heatingState: energySource(d) === 'estimated' ? currentHeatingState(db, d, now) : 'unknown',
@@ -577,6 +593,11 @@ export function getHome(db: DatabaseSync, id: string, now: number, days = 14): H
     ...homeView(db, home, now),
     devices: devices.map((d) => deviceView(db, d, now)),
     history: history(db, devices, now, days),
+    climateHistory: Array.from({ length: days }, (_, i) => {
+      const day = previousDate(localDate(now), days - i - 1);
+      const { start, end } = dayBounds(day);
+      return { day, ...climateForPeriod(db, id, start, Math.min(end, now + 1)) };
+    }),
   };
 }
 export function getDevice(

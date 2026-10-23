@@ -12,6 +12,7 @@ import type { EnergyStats, HistoryPoint, HomeView, NotificationView } from '../s
 import { localizeNotification } from '../shared/notificationMessages';
 import { useI18n } from './i18n';
 import { componentMessages } from './locales/components';
+import { ClimateCompact } from './Climate';
 
 export function Brand() {
   return (
@@ -368,6 +369,7 @@ export function HomeCard({ home }: { home: HomeView }) {
         </span>
       </div>
       <EnergyBreakdown stats={home.stats} />
+      <ClimateCompact climate={home.climate} />
       <div className={`meter ${exceeded ? 'exceeded' : ''}`}>
         <span
           style={{

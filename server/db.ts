@@ -4,7 +4,7 @@ export function openDatabase(path: string): DatabaseSync {
   const db = new DatabaseSync(path);
   const version = (db.prepare('PRAGMA user_version').get() as { user_version: number })
     .user_version;
-  if (version > 7) {
+  if (version > 8) {
     db.close();
     throw new Error('Unsupported database version');
   }
@@ -141,6 +141,23 @@ export function openDatabase(path: string): DatabaseSync {
         ALTER TABLE devices ADD COLUMN temperature_config TEXT;
         ALTER TABLE devices ADD COLUMN temperature_metadata TEXT NOT NULL DEFAULT '{}';
         PRAGMA user_version=7;
+      `);
+    });
+  if (version < 8)
+    transaction(db, () => {
+      db.exec(`
+        ALTER TABLE devices ADD COLUMN humidity REAL;
+        ALTER TABLE devices ADD COLUMN climate_at INTEGER;
+        CREATE TABLE climate_observations (
+          device_id TEXT NOT NULL REFERENCES devices(id),
+          home_id TEXT NOT NULL REFERENCES homes(id),
+          at INTEGER NOT NULL,
+          temperature REAL,
+          humidity REAL CHECK(humidity BETWEEN 0 AND 100),
+          PRIMARY KEY(device_id, at)
+        );
+        CREATE INDEX climate_observations_home_time ON climate_observations(home_id,at);
+        PRAGMA user_version=8;
       `);
     });
   return db;

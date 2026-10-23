@@ -123,14 +123,52 @@ def power_reading(status, specification):
     return None, None
 
 
+def climate_readings(status, specification):
+    """Use only current environmental DPs and explicit numeric metadata."""
+    definitions = {field['code']: field for field in
+                   specification.get('functions', []) + specification.get('status', [])}
+    units = {'℃': 'C', '°c': 'C', 'c': 'C', '℉': 'F', '°f': 'F', 'f': 'F'}
+
+    def read(codes, humidity=False):
+        for code in codes:
+            definition = definitions.get(code, {})
+            raw = status.get(code)
+            if (definition.get('type', '').lower() not in ('integer', 'value') or
+                    type(raw) not in (int, float) or not math.isfinite(raw)):
+                continue
+            try:
+                meta = definition.get('values', {})
+                if isinstance(meta, str):
+                    meta = json.loads(meta)
+                scale = meta.get('scale')
+                unit = str(meta.get('unit', '')).strip().lower()
+                if type(scale) is not int or not 0 <= scale <= 9:
+                    continue
+                value = raw / 10 ** scale
+                if humidity:
+                    if unit == '%' and 0 <= value <= 100:
+                        return value
+                elif unit in units:
+                    celsius = (value - 32) * 5 / 9 if units[unit] == 'F' else value
+                    if math.isfinite(celsius) and celsius >= -273.15:
+                        return celsius
+            except (ValueError, TypeError, AttributeError, OverflowError):
+                continue
+        return None
+
+    return (read(('temp_current', 'current_temp', 'va_temperature', 'temp_current_f', 'current_temp_f')),
+            read(('humidity_value', 'humidity_current', 'cur_humidity', 'va_humidity'), humidity=True))
+
+
 def normalize_device(device, specification, reports):
     status = {s['code']: s['value'] for s in device.get('status', []) if 'code' in s and 'value' in s}
     types = {r['dp_code']: r.get('report_type') for r in reports}
     power_field, watts = power_reading(status, specification)
+    temperature, humidity = climate_readings(status, specification)
     result = {'id': device['id'], 'name': device.get('name', 'Device'),
               'category': device.get('category', ''), 'online': bool(device.get('online')),
               'energyCode': None, 'counterKwh': None, 'incrementKwh': None, 'energyKind': 'unsupported',
-              'temperature': None, 'powerW': watts, 'powerField': power_field,
+              'temperature': temperature, 'humidity': humidity, 'powerW': watts, 'powerField': power_field,
               'temperatureMetadata': temperature_metadata(specification),
               'statusFields': status_fields(device, specification)}
     for field in specification.get('status', []):
@@ -149,8 +187,6 @@ def normalize_device(device, specification, reports):
             unit = str(meta.get('unit', '')).lower().replace(' ', '').replace('·', '')
         except (ValueError, TypeError, AttributeError):
             continue
-        if code == 'temp_current' and unit in ('℃', '°c', 'c'):
-            result['temperature'] = value
         # Some sharing schemas omit the unit for standard add_ele increments.
         # Tuya defines this scale-3 DP in kWh; require the explicit sum report type.
         # https://developer.tuya.com/en/docs/iot/1s?id=K9tp11c62qjq8
