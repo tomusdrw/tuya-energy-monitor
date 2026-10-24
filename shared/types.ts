@@ -158,6 +158,7 @@ export interface NotificationContent {
   body: string;
 }
 export interface NotificationView {
+  push?: import('./push.js').PushSummary;
   id: string;
   homeId: string | null;
   kind: string;
@@ -179,6 +180,8 @@ export interface Overview {
   alerts: NotificationView[];
 }
 export interface SettingsView {
+  emailEnabled?: boolean;
+  pushConfigured?: boolean;
   timezone: string;
   pollSeconds: number;
   statusPollSeconds: number;

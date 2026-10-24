@@ -27,6 +27,8 @@ import { HomeSwitcher } from './HomeSwitcher';
 import { ClimateHistory, ClimateSummaryCards, DeviceClimate } from './Climate';
 import { useI18n } from './i18n';
 import { messages } from './locales/pages';
+import { pushMessages } from './locales/push';
+import { PushSettings, EmailDeliverySwitch } from './PushSettings';
 import {
   AlertList,
   Badge,
@@ -644,30 +646,38 @@ export function AccountsPage() {
 }
 
 export function NotificationsPage() {
-  const { t } = useI18n(messages);
+  const { t } = useI18n({ ...messages, ...pushMessages });
   const { data, error } = useApi<NotificationView[]>('/notifications');
   const settings = useApi<SettingsView>('/settings');
   return (
     <>
       <PageTitle
         title={t('Notifications')}
-        subtitle={t('Threshold alerts, unusual usage, and weekly summaries.')}
+        subtitle={t('Energy alerts, monitoring availability, and weekly summaries.')}
       />
-      {settings.data && !settings.data.emailConfigured && (
-        <Notice tone="warning">
-          {t('Email delivery is not configured. Events will be recorded here.')}{' '}
-          <a href="#settings">{t('View email settings.')}</a>
-        </Notice>
-      )}
+      {settings.data &&
+        !settings.data.emailConfigured &&
+        settings.data.emailEnabled !== false &&
+        !settings.data.pushConfigured && (
+          <Notice tone="warning">
+            {t('Email delivery is not configured. Events will be recorded here.')}{' '}
+            <a href="#settings">{t('View email settings.')}</a>
+          </Notice>
+        )}
       {error && <Notice tone="error">{t(error)}</Notice>}
       <div className="panel">{data ? <AlertList items={data} /> : <Loading />}</div>
+      <p className="field-help">
+        {t(
+          'Push submission confirms acceptance by the delivery service, not that the notification was displayed or read.',
+        )}
+      </p>
     </>
   );
 }
 
 export function SettingsPage() {
   const { t, number } = useI18n(messages);
-  const { data, error } = useApi<SettingsView>('/settings');
+  const { data, error, refresh } = useApi<SettingsView>('/settings');
   if (error) return <Notice tone="error">{t(error)}</Notice>;
   if (!data) return <Loading />;
   return (
@@ -689,10 +699,12 @@ export function SettingsPage() {
           )}
         </p>
       </section>
+      <PushSettings />
       <div className="panel">
         <SectionTitle title={t('Email notifications')} subtitle={t('Delivered by Resend')}>
           <Mail size={23} />
         </SectionTitle>
+        <EmailDeliverySwitch enabled={data.emailEnabled !== false} onSaved={refresh} />
         <Badge tone={data.emailConfigured ? 'success' : 'warning'}>
           {data.emailConfigured ? t('Email delivery configured') : t('Configuration required')}
         </Badge>

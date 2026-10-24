@@ -13,6 +13,7 @@ import { localizeNotification } from '../shared/notificationMessages';
 import { useI18n } from './i18n';
 import { componentMessages } from './locales/components';
 import { ClimateCompact } from './Climate';
+import { pushMessages } from './locales/push';
 
 export function Brand() {
   return (
@@ -396,7 +397,7 @@ export function HomeCard({ home }: { home: HomeView }) {
 }
 
 export function AlertList({ items }: { items: NotificationView[] }) {
-  const { t, date, language } = useI18n(componentMessages);
+  const { t, date, language } = useI18n({ ...componentMessages, ...pushMessages });
   if (!items.length)
     return (
       <Empty title={t('Notifications will appear here')}>
@@ -431,9 +432,45 @@ export function AlertList({ items }: { items: NotificationView[] }) {
                     content.title
                   )}
                 </h3>
-                <Badge tone={item.status === 'sent' ? 'success' : 'warning'}>
-                  {t(labels[item.status] ?? item.status)}
-                </Badge>
+                <div className="delivery-badges">
+                  <Badge
+                    tone={
+                      item.status === 'sent'
+                        ? 'success'
+                        : item.status === 'skipped'
+                          ? 'muted'
+                          : 'warning'
+                    }
+                  >
+                    {item.status === 'skipped'
+                      ? t('Email: not requested')
+                      : t('Email: {status}', { status: t(labels[item.status] ?? item.status) })}
+                  </Badge>
+                  {item.push && (
+                    <>
+                      {item.push.submitted > 0 && (
+                        <Badge tone="success">
+                          {t('Push: submitted {count}', { count: item.push.submitted })}
+                        </Badge>
+                      )}
+                      {item.push.pending > 0 && (
+                        <Badge tone="warning">
+                          {t('Push: pending {count}', { count: item.push.pending })}
+                        </Badge>
+                      )}
+                      {item.push.failed > 0 && (
+                        <Badge tone="warning">
+                          {t('Push: failed {count}', { count: item.push.failed })}
+                        </Badge>
+                      )}
+                      {item.push.cancelled > 0 && (
+                        <Badge>
+                          {t('Push: cancelled {count}', { count: item.push.cancelled })}
+                        </Badge>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
               <time>{date(item.createdAt)}</time>
               <details>

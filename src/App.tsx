@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { browserPush } from './push';
 import {
   LayoutDashboard,
   Building2,
@@ -31,7 +32,13 @@ import {
 } from './components';
 import { HomePage, DevicePage, AccountsPage, NotificationsPage, SettingsPage } from './pages';
 
-function Login({ onLogin }: { onLogin: () => void }) {
+export function Login({
+  onLogin,
+  pendingLogout = false,
+}: {
+  onLogin: () => void | Promise<void>;
+  pendingLogout?: boolean;
+}) {
   const { t } = useI18n(appMessages);
   const [password, setPassword] = useState(''),
     [busy, setBusy] = useState(false),
@@ -42,7 +49,8 @@ function Login({ onLogin }: { onLogin: () => void }) {
     setError('');
     try {
       await api('/auth/login', 'POST', { password });
-      onLogin();
+      await onLogin();
+      setPassword('');
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -83,6 +91,13 @@ function Login({ onLogin }: { onLogin: () => void }) {
           </span>
           <h1>{t('Welcome back')}</h1>
           <p>{t('Sign in to your monitoring dashboard.')}</p>
+          {pendingLogout && (
+            <Notice tone="warning">
+              {t(
+                'Sign-out is incomplete. Notifications may still arrive. Sign in again to disable them on this device and finish signing out.',
+              )}
+            </Notice>
+          )}
           {error && <Notice tone="error">{t(error)}</Notice>}
           <label>
             {t('Owner password')}
@@ -96,7 +111,11 @@ function Login({ onLogin }: { onLogin: () => void }) {
             />
           </label>
           <button className="button primary full" disabled={busy}>
-            {busy ? t('Signing in…') : t('Sign in')}
+            {busy
+              ? t('Signing in…')
+              : pendingLogout
+                ? t('Sign in and disable notifications')
+                : t('Sign in')}
             <ChevronRight size={18} />
           </button>
           <p className="login-help">
@@ -248,6 +267,17 @@ export function Dashboard({
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [pendingLogout, setPendingLogout] = useState(() => browserPush().hasPendingLogout());
+  async function logout() {
+    setPendingLogout(true);
+    await browserPush().logout();
+    setPendingLogout(false);
+    setAuthenticated(false);
+  }
+  async function login() {
+    if (pendingLogout || browserPush().hasPendingLogout()) await logout();
+    else setAuthenticated(true);
+  }
   useEffect(() => {
     api<{ authenticated: boolean }>('/auth')
       .then((r) => setAuthenticated(r.authenticated))
@@ -257,11 +287,22 @@ export default function App() {
     return () => window.removeEventListener('session-expired', expired);
   }, []);
   if (authenticated === null) return <Loading />;
-  if (!authenticated) return <Login onLogin={() => setAuthenticated(true)} />;
-  return <Shell onLogout={() => setAuthenticated(false)} />;
+  if (!authenticated) return <Login onLogin={login} pendingLogout={pendingLogout} />;
+  return <Shell onLogout={logout} pendingLogout={pendingLogout} />;
 }
 
-function Shell({ onLogout }: { onLogout: () => void }) {
+function Shell({
+  onLogout,
+  pendingLogout,
+}: {
+  onLogout: () => Promise<void>;
+  pendingLogout: boolean;
+}) {
+  useEffect(() => {
+    void browserPush()
+      .reconcile()
+      .catch(() => {});
+  }, []);
   const { t, number } = useI18n(appMessages);
   const [route, setRoute] = useState(location.hash.slice(1));
   const [days, setDays] = useState(14),
@@ -307,8 +348,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
   const title = nav.find((n) => n.path === active)?.label ?? 'Overview';
   async function logout() {
     try {
-      await api('/auth/logout', 'POST', {});
-      onLogout();
+      await onLogout();
     } catch (e) {
       setMessage((e as Error).message);
     }
@@ -412,6 +452,11 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         </div>
         <main className="content" id="main-content" tabIndex={-1}>
           {message && <Notice>{t(message)}</Notice>}
+          {pendingLogout && (
+            <Notice tone="warning">
+              {t('Sign-out is incomplete. Notifications may still arrive. Try signing out again.')}
+            </Notice>
+          )}
           {overview.error && <Notice tone="error">{t(overview.error)}</Notice>}
           {route === '' &&
             (overview.data ? (

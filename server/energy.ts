@@ -483,6 +483,21 @@ export function accounts(db: DatabaseSync, now = Date.now()): AccountView[] {
 }
 
 export function notifications(db: DatabaseSync): NotificationView[] {
+  const delivery = new Map(
+    (
+      db
+        .prepare(
+          `SELECT event_id,
+    SUM(status='submitted') AS submitted,SUM(status IN ('pending','retry')) AS pending,
+    SUM(status IN ('failed','expired')) AS failed,SUM(status='cancelled') AS cancelled
+    FROM push_deliveries GROUP BY event_id`,
+        )
+        .all() as Row[]
+    ).map((r) => [
+      r.event_id,
+      { submitted: r.submitted, pending: r.pending, failed: r.failed, cancelled: r.cancelled },
+    ]),
+  );
   return (
     db
       .prepare(
@@ -498,6 +513,7 @@ export function notifications(db: DatabaseSync): NotificationView[] {
     ...(n.translation ? { translations: { pl: JSON.parse(n.translation) } } : {}),
     createdAt: n.created_at,
     status: n.status,
+    push: delivery.get(n.id),
     sentAt: n.sent_at,
     error: n.error ? localizeSystemMessage(n.error, 'en') : null,
   }));

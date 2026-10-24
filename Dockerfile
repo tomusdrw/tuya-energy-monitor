@@ -5,6 +5,7 @@ RUN npm ci
 COPY tsconfig.json tsconfig.server.json vite.config.ts index.html ./
 COPY src ./src
 COPY assets ./assets
+COPY public ./public
 COPY shared ./shared
 COPY server ./server
 COPY scripts ./scripts

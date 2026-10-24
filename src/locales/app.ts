@@ -14,6 +14,11 @@ export const appMessages: Record<string, string> = {
   'Close menu': 'Zamknij menu',
   'Main menu': 'Menu główne',
   'Log out': 'Wyloguj',
+  'Sign-out is incomplete. Notifications may still arrive. Sign in again to disable them on this device and finish signing out.':
+    'Wylogowanie nie zostało dokończone. Powiadomienia mogą nadal przychodzić. Zaloguj się ponownie, aby wyłączyć je na tym urządzeniu i dokończyć wylogowanie.',
+  'Sign in and disable notifications': 'Zaloguj się i wyłącz powiadomienia',
+  'Sign-out is incomplete. Notifications may still arrive. Try signing out again.':
+    'Wylogowanie nie zostało dokończone. Powiadomienia mogą nadal przychodzić. Spróbuj wylogować się ponownie.',
   'Open menu': 'Otwórz menu',
   Apartments: 'Mieszkania',
   'Each Tuya home has its own usage, history and alert rules.':
