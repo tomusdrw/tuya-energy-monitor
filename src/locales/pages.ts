@@ -13,6 +13,9 @@ export const messages: Messages = {
   'Energy source': 'Źródło energii',
   'Configure estimation in Edit.': 'Skonfiguruj estymację przez „Edytuj”.',
   'How this energy is calculated': 'Jak obliczamy zużycie',
+  'Included in heating total': 'Wliczane do ogrzewania',
+  'View readings and summary participation. Open a device to see its history.':
+    'Zobacz odczyty i udział w podsumowaniach. Otwórz urządzenie, aby zobaczyć jego historię.',
   'Switch apartment': 'Przełącz mieszkanie',
   'Previous apartment': 'Poprzednie mieszkanie',
   'Next apartment': 'Następne mieszkanie',

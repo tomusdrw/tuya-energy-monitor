@@ -70,8 +70,11 @@ test('ordinary excluded devices stay visible while ignored devices are grouped i
     assert.ok(main.includes('Pending meter'), 'Excluded is distinct from ignored');
     assert.ok(main.includes('Tracked heater'));
     assert.ok(!main.includes('Ignored sensor'));
-    assert.equal((main.match(/role="switch"/g) ?? []).length, 2);
-    assert.equal((main.match(/aria-checked="true"/g) ?? []).length, 1);
+    assert.doesNotMatch(main, /role="switch"/);
+    assert.doesNotMatch(main, /class="monitoring-heading"/);
+    assert.ok(
+      main.includes(language === 'en' ? 'Included in heating total' : 'Wliczane do ogrzewania'),
+    );
   }
 });
 

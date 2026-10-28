@@ -12,28 +12,20 @@ type OnSaved = (moved?: MovedDevice) => void;
 
 function DeviceRow({ device: d, onSaved }: { device: DeviceView; onSaved: OnSaved }) {
   const { t, date, energyNumber } = useI18n(messages);
-  const [included, setIncluded] = useState(d.included),
-    [busy, setBusy] = useState<'monitoring' | 'ignore' | null>(null),
+  const [busy, setBusy] = useState(false),
     [error, setError] = useState('');
-  useEffect(() => setIncluded(d.included), [d.included]);
-  async function update(patch: { included?: boolean; ignored?: boolean }) {
+  async function update(ignored: boolean) {
     if (busy) return;
     const previousFocus = document.activeElement;
-    setBusy(patch.ignored === undefined ? 'monitoring' : 'ignore');
+    setBusy(true);
     setError('');
     try {
-      await api(`/devices/${d.id}`, 'PUT', patch);
-      if (patch.ignored) setIncluded(false);
-      else if (patch.included !== undefined) setIncluded(patch.included);
-      onSaved(
-        patch.ignored === undefined
-          ? undefined
-          : { id: d.id, ignored: patch.ignored, previousFocus },
-      );
+      await api(`/devices/${d.id}`, 'PUT', { ignored });
+      onSaved({ id: d.id, ignored, previousFocus });
     } catch (e) {
       setError((e as Error).message);
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   }
   return (
@@ -49,9 +41,11 @@ function DeviceRow({ device: d, onSaved }: { device: DeviceView; onSaved: OnSave
               {d.fresh ? t('Online') : t('Inactive · offline or stale readings')}
               {d.ignored ? (
                 <> · {t('Ignored')}</>
-              ) : !included ? (
+              ) : d.included ? (
+                <> · {t('Included in heating total')}</>
+              ) : (
                 <> · {t('Excluded from apartment total')}</>
-              ) : null}
+              )}
             </small>
             <DeviceClimate device={d} />
           </div>
@@ -95,50 +89,29 @@ function DeviceRow({ device: d, onSaved }: { device: DeviceView; onSaved: OnSave
         </span>
         <ChevronRight size={17} />
       </a>
-      <div className="device-monitoring-actions">
-        {!d.ignored && (
-          <button
-            className="monitoring-toggle"
-            type="button"
-            role="switch"
-            aria-checked={included}
-            aria-label={t('Include {name} in apartment total and alert rules', { name: d.name })}
-            aria-busy={busy === 'monitoring'}
-            disabled={busy !== null}
-            onClick={() => void update({ included: !included })}
-          >
-            {busy === 'monitoring' ? (
-              <LoaderCircle size={18} className="spin" aria-hidden="true" />
-            ) : (
-              <span className="monitoring-switch" aria-hidden="true" />
-            )}
-            <span>
-              {busy === 'monitoring' ? t('Saving…') : included ? t('Included') : t('Excluded')}
-            </span>
-          </button>
-        )}
+      <div className="device-list-actions">
         <button
           className="device-ignore-button"
           type="button"
           aria-label={t(d.ignored ? 'Restore {name} to the device list' : 'Ignore {name}', {
             name: d.name,
           })}
-          disabled={busy !== null}
-          aria-busy={busy === 'ignore'}
-          onClick={() => void update({ ignored: !d.ignored })}
+          disabled={busy}
+          aria-busy={busy}
+          onClick={() => void update(!d.ignored)}
         >
-          {busy === 'ignore' ? (
+          {busy ? (
             <LoaderCircle size={16} className="spin" aria-hidden="true" />
           ) : d.ignored ? (
             <RotateCcw size={16} aria-hidden="true" />
           ) : (
             <EyeOff size={16} aria-hidden="true" />
           )}
-          {busy === 'ignore' ? t('Saving…') : d.ignored ? t('Restore') : t('Ignore')}
+          {busy ? t('Saving…') : d.ignored ? t('Restore') : t('Ignore')}
         </button>
       </div>
       {error && (
-        <div className="device-monitoring-error">
+        <div className="device-list-error">
           <Notice tone="error">
             {d.name}: {t(error)}
           </Notice>
@@ -160,7 +133,6 @@ function DeviceTable({ devices, onSaved }: { devices: DeviceView[]; onSaved: OnS
           <span>{t('Last reading')}</span>
           <span />
         </div>
-        <span className="monitoring-heading">{t('Monitoring')}</span>
       </div>
       {devices.map((d) => (
         <DeviceRow key={d.id} device={d} onSaved={onSaved} />
@@ -183,7 +155,7 @@ export function DeviceList({ devices, onSaved }: { devices: DeviceView[]; onSave
     const target = moved.ignored
       ? list.current?.querySelector<HTMLElement>('.ignored-devices > summary')
       : list.current?.querySelector<HTMLElement>(
-          `[data-device-id="${CSS.escape(moved.id)}"] [role="switch"]`,
+          `[data-device-id="${CSS.escape(moved.id)}"] a.device-row`,
         );
     target?.focus({ preventScroll: true });
   }, [devices]);

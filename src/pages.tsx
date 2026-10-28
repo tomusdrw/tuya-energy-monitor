@@ -21,6 +21,7 @@ import type {
 import { api, useApi } from './api';
 import { TuyaAiForm } from './TuyaAiForm';
 import { DeviceList } from './DeviceList';
+import { DeviceSelection } from './DeviceSelection';
 import { HomeSwitcher } from './HomeSwitcher';
 import { ClimateHistory, ClimateSummaryCards } from './Climate';
 import { useI18n } from './i18n';
@@ -181,6 +182,10 @@ export function HomePage({
     { data, error, refresh } = useApi<HomeDetail>(`/homes/${id}?days=${days}`);
   const home = data?.id === id ? data : null;
   const selectedHome = home ?? homes.find((item) => item.id === id);
+  const selectionSaved = () => {
+    refresh();
+    onMonitoringChanged?.();
+  };
   return (
     <>
       <a className="back-link" href="#homes">
@@ -223,6 +228,12 @@ export function HomePage({
               </strong>
               <EnergyBreakdown stats={home.stats} />
               <Coverage stats={home.stats} />
+              <DeviceSelection
+                key={home.id}
+                homeId={home.id}
+                mode="energy"
+                onSaved={selectionSaved}
+              />
             </div>
             <div className="stat">
               <span>{t('Daily threshold')}</span>
@@ -248,7 +259,11 @@ export function HomePage({
               )}
             </Notice>
           )}
-          <ClimateSummaryCards climate={home.climate} />
+          <ClimateSummaryCards
+            climate={home.climate}
+            homeId={home.id}
+            onSelectionSaved={selectionSaved}
+          />
           <div className="panel">
             <SectionTitle title={t('Climate history')}>
               <Range days={days} setDays={setDays} />
@@ -265,7 +280,7 @@ export function HomePage({
             <SectionTitle
               title={t('Devices')}
               subtitle={t(
-                'Choose which devices count toward the apartment total and alerts. Open a device to see its history.',
+                'View readings and summary participation. Open a device to see its history.',
               )}
             />
             <DeviceList

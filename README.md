@@ -89,12 +89,15 @@ Documentation uses the English interface labels.
 - Set a daily threshold **independently for each apartment**. No threshold is
   enabled by default. Adjust or disable anomaly detection in the same form.
 
-Each apartment's device list has an **Included / Excluded** switch that immediately
-updates its total and the overview. **Ignore** moves a device into the initially
+Use **Choose devices** next to the apartment energy summary to select devices for
+its total, history and alerts. Checkboxes save immediately and refresh the overview.
+The device list displays participation and readings; device details offer shortcuts
+to the same selection panels. **Ignore** moves a device into the initially
 collapsed **Ignored devices** section and excludes it from totals and alerts.
 Use this for devices you have reviewed and do not need for energy monitoring.
 Ordinary excluded devices remain in the main list. **Restore** returns a device
-to that list with monitoring still off; enable its switch when you want it counted.
+to that list with monitoring still off; select it in **Choose devices** when you
+want it counted. Selecting an ignored device there also restores it to the list.
 These choices are saved on the server and survive synchronization. Existing devices
 are not automatically marked ignored, and ignoring never deletes their history.
 
@@ -124,9 +127,13 @@ encrypted with AES-256-GCM before storage and never returned to the browser.
 Each apartment shows **Home climate**: current average temperature and humidity,
 minimum/maximum, contributing sensor count and the oldest contributing cloud-read
 time. Apartment cards show the averages, and device lists/details show individual
-readings. All available sensors count, including devices excluded or ignored for
-energy monitoring. Each device has equal weight; temperature and humidity have
-separate sensor counts. No data is displayed as `—`, never zero.
+readings. **Choose sensors** next to average temperature independently selects its
+contributors, including devices excluded or ignored for energy monitoring. All
+temperature sensors are selected by default. Excluded sensors retain their readings
+and show **Excluded from average**; known sensors remain selectable while offline
+or temporarily missing readings. Humidity continues to use all available sensors.
+Each device has equal weight; temperature and humidity have separate sensor counts.
+No data or an empty selection is displayed as `—`, never zero.
 
 Climate is collected with the existing five-minute Sharing/QR inventory sync,
 without extra cloud requests or a Tuya.ai key. Offline or disappeared devices and
@@ -145,6 +152,8 @@ sensor fields in its [temperature/humidity function definition](https://develope
 **Climate history** uses the selected 7/14/30-day range. Dots show daily home
 averages and vertical lines show observed minimum/maximum. Each sensor's daily
 sample mean receives equal weight, so devices with more samples do not dominate.
+Temperature averages, ranges and history use the current sensor selection; changing
+it recalculates historical summaries without removing any stored observations.
 **View daily climate readings** provides the values, sensor counts and sample
 counts, including days without readings. Sparse samples do not imply full-day
 coverage; no gaps are interpolated. Days follow Europe/Warsaw, including daylight
@@ -578,6 +587,10 @@ Schema v9 adds encrypted notification receivers, retired endpoint hashes,
 session associations, the push outbox, monitoring availability episodes and
 independent Tuya.ai connection observations. Existing email retry payloads and
 energy/climate history are preserved.
+
+Schema v10 adds independent temperature participation, enabled for existing and new
+devices by default, and an index for finding devices with recorded temperatures.
+Existing energy participation, ignored status and observations are preserved.
 
 Run one process per database. Raw readings, climate/heating observations and intervals are retained; size grows
 with time and the number of devices. Schedule volume backups and monitor disk
