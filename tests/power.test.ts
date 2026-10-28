@@ -259,10 +259,12 @@ test('power totals, chart and automatic monitoring panel identify the source in 
       assert.ok(dashboard.includes(language === 'en' ? '≈ 0.02' : '≈ 0,02'));
       assert.ok(dashboard.includes(language === 'en' ? 'From power:' : 'Z pomiaru mocy:'));
       assert.ok(dashboard.includes('bar-power'), 'Power consumption is visible on the chart');
-      const title = dashboard.match(/<title>([^<]+)<\/title>/)?.[1];
+      // Interactive hover content is covered in chart-hover.test.ts; the disclosure
+      // must also expose this real, power-derived reading without interaction.
+      const readings = dashboard.match(/<details[\s\S]*?<\/details>/)?.[0];
       assert.ok(
-        title?.includes(language === 'en' ? 'From power: 0.02 kWh' : 'Z pomiaru mocy: 0,02 kWh'),
-        'The chart tooltip exposes the power-derived portion',
+        readings?.includes(language === 'en' ? 'From power: 0.02 kWh' : 'Z pomiaru mocy: 0,02 kWh'),
+        'Daily chart readings expose the power-derived portion',
       );
       const panel = renderToStaticMarkup(
         createElement(LanguageProvider, {

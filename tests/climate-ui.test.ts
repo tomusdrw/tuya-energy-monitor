@@ -104,7 +104,7 @@ test('climate summaries and history expose ranges, contributing counts, gaps and
     );
     assert.ok(!noData.includes('21.5') && !noData.includes('21,5'));
     const history = render(createElement(ClimateHistory, { points: filled.climateHistory }));
-    assert.equal((history.match(/role="img"/g) ?? []).length, 2);
+    assert.equal((history.match(/<svg[^>]*role="group"/g) ?? []).length, 2);
     assert.ok(history.includes('<details'));
     assert.ok(
       history.includes(

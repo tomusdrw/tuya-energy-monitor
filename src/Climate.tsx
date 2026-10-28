@@ -9,6 +9,7 @@ import type {
 import { useI18n } from './i18n';
 import { messages } from './locales/climate';
 import { DeviceSelection } from './DeviceSelection';
+import { InteractiveChart } from './InteractiveChart';
 
 const metrics = ['temperature', 'humidity'] as const;
 const unit = (key: (typeof metrics)[number]) => (key === 'temperature' ? '°C' : '%');
@@ -149,7 +150,16 @@ function MetricChart({
       {!values.length ? (
         <p className="climate-help">{t('No readings')}</p>
       ) : (
-        <svg viewBox={`0 0 ${width} 210`} role="img" aria-label={label}>
+        <InteractiveChart
+          width={width}
+          height={210}
+          label={label}
+          plot={{ left: 48, right: width - 20, top: 35, bottom: 180 }}
+          points={points.map((point) => ({
+            day: point.day,
+            content: <DailyMetric value={point[metric]} metric={metric} />,
+          }))}
+        >
           {[low, (low + high) / 2, high].map((tick) => (
             <g key={tick}>
               <line x1={44} x2={width - 12} y1={y(tick)} y2={y(tick)} className="chart-grid" />
@@ -162,7 +172,6 @@ function MetricChart({
             const value = point[metric];
             return (
               <g key={point.day}>
-                <title>{`${day(point.day)}: ${value.average === null ? t('No readings') : `${number(value.average, 1)} ${unit(metric)}`}`}</title>
                 {value.average !== null ? (
                   <>
                     <line
@@ -187,7 +196,7 @@ function MetricChart({
               </g>
             );
           })}
-        </svg>
+        </InteractiveChart>
       )}
     </div>
   );
