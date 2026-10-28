@@ -8,6 +8,7 @@ import type {
 } from '../shared/types';
 import { useI18n } from './i18n';
 import { messages } from './locales/climate';
+import { DeviceSelection } from './DeviceSelection';
 
 const metrics = ['temperature', 'humidity'] as const;
 const unit = (key: (typeof metrics)[number]) => (key === 'temperature' ? '°C' : '%');
@@ -43,11 +44,14 @@ export function DeviceClimate({
   detailed?: boolean;
 }) {
   const { t, number, date } = useI18n(messages);
-  if (!detailed && device.temperature === null && device.humidity === null) return null;
+  if (!detailed && !device.hasTemperature && device.humidity === null) return null;
   return (
     <div className={detailed ? 'device-climate-detail' : 'device-climate'}>
       <span>
         {t('Current temperature')}: <strong>{number(device.temperature, 1)} °C</strong>
+        {device.hasTemperature && !device.temperatureIncluded && (
+          <span className="temperature-excluded">{t('Excluded from average')}</span>
+        )}
       </span>
       <span>
         {t('Current humidity')}: <strong>{number(device.humidity, 1)} %</strong>
@@ -57,14 +61,22 @@ export function DeviceClimate({
   );
 }
 
-export function ClimateSummaryCards({ climate }: { climate: ClimateSummary }) {
+export function ClimateSummaryCards({
+  climate,
+  homeId,
+  onSelectionSaved,
+}: {
+  climate: ClimateSummary;
+  homeId?: string;
+  onSelectionSaved?: () => void;
+}) {
   const { t, number, date } = useI18n(messages);
   return (
     <section className="climate-summary" aria-label={t('Home climate')}>
       <h2>{t('Home climate')}</h2>
       <p className="climate-help">
         {t(
-          'Equal-weight averages from all available sensors, including devices excluded or ignored for energy. Offline devices and readings older than 15 minutes are omitted.',
+          'Temperature uses selected sensors; humidity uses all available sensors. Each sensor has equal weight, independently of energy selection. Offline devices and readings older than 15 minutes are omitted.',
         )}
       </p>
       <div className="climate-grid">
@@ -89,6 +101,14 @@ export function ClimateSummaryCards({ climate }: { climate: ClimateSummary }) {
                   <p>{t('Sensors: {count}', { count: number(value.count, 0) })}</p>
                   <p>{t('Oldest cloud read: {date}', { date: date(value.oldestObservedAt) })}</p>
                 </>
+              )}
+              {key === 'temperature' && homeId && onSelectionSaved && (
+                <DeviceSelection
+                  key={homeId}
+                  homeId={homeId}
+                  mode="temperature"
+                  onSaved={onSelectionSaved}
+                />
               )}
             </div>
           );
@@ -213,7 +233,7 @@ export function ClimateHistory({ points }: { points: ClimateHistoryPoint[] }) {
     <>
       <p className="climate-help">
         {t(
-          'Daily sensor averages have equal weight. Lines show observed minimum–maximum; dots show the home average. Missing days remain gaps.',
+          'Temperature history uses the current sensor selection. Daily sensor averages have equal weight. Lines show observed minimum–maximum; dots show the home average. Missing days remain gaps.',
         )}
       </p>
       <div className="climate-grid">

@@ -174,7 +174,7 @@ test('schema v9 preserves old notification retry data and allows receiver-sessio
     db.exec('PRAGMA user_version=8');
     db.close();
     db = openDatabase(file);
-    assert.equal((db.prepare('PRAGMA user_version').get() as any).user_version, 9);
+    assert.equal((db.prepare('PRAGMA user_version').get() as any).user_version, 10);
     assert.equal((db.prepare('SELECT receiver_id FROM sessions').get() as any).receiver_id, null);
     assert.equal(
       (db.prepare('SELECT payload FROM notifications').get() as any).payload,

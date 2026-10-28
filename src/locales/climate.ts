@@ -1,6 +1,11 @@
 import type { Messages } from '../../shared/i18n';
 
 export const messages: Messages = {
+  'Excluded from average': 'Poza średnią',
+  'Temperature uses selected sensors; humidity uses all available sensors. Each sensor has equal weight, independently of energy selection. Offline devices and readings older than 15 minutes are omitted.':
+    'Temperatura uwzględnia wybrane czujniki, a wilgotność wszystkie dostępne. Każdy czujnik ma równą wagę, niezależnie od wyboru do zużycia energii. Pomijamy urządzenia offline i odczyty starsze niż 15 minut.',
+  'Temperature history uses the current sensor selection. Daily sensor averages have equal weight. Lines show observed minimum–maximum; dots show the home average. Missing days remain gaps.':
+    'Historia temperatury uwzględnia aktualny wybór czujników. Dzienne średnie czujników mają równą wagę. Linie pokazują zaobserwowane minimum–maksimum, a punkty średnią dla domu. Dni bez danych pozostają lukami.',
   'Home climate': 'Warunki w domu',
   Temperature: 'Temperatura',
   Humidity: 'Wilgotność',

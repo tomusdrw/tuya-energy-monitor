@@ -52,6 +52,8 @@ export interface DeviceView {
   category: string;
   included: boolean;
   ignored: boolean;
+  temperatureIncluded: boolean;
+  hasTemperature: boolean;
   online: boolean;
   present: boolean;
   fresh: boolean;

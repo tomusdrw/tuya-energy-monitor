@@ -69,6 +69,96 @@ test('home climate weights every available sensor equally, separately per metric
   }
 });
 
+test('temperature selection filters summaries and history without hiding readings or changing humidity', () => {
+  const db = setup();
+  try {
+    ingestSnapshot(db, 'a', snapshot([sensor('inside', 22, 40), sensor('outside', 2, 80)]), at);
+    const outside = home(db).devices.find((d) => d.name === 'outside')!;
+    assert.equal(outside.temperatureIncluded, true);
+    assert.equal(outside.hasTemperature, true);
+    db.prepare('UPDATE devices SET temperature_included=0 WHERE id=?').run(outside.id);
+    const detail = home(db);
+    for (const climate of [detail.climate, detail.climateHistory.at(-1)!]) {
+      assert.equal(climate.temperature.average, 22);
+      assert.equal(climate.temperature.minimum, 22);
+      assert.equal(climate.temperature.maximum, 22);
+      assert.equal(climate.temperature.count, 1);
+      assert.equal(climate.humidity.average, 60);
+    }
+    assert.equal(detail.devices.find((d) => d.id === outside.id)?.temperature, 2);
+    assert.equal(getOverview(db, at).homes[0].climate.temperature.average, 22);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM climate_observations').get()?.n, 2);
+    db.exec('UPDATE devices SET temperature_included=0');
+    assert.equal(home(db).climate.temperature.average, null);
+    assert.equal(home(db).climate.temperature.count, 0);
+    assert.equal(home(db).climateHistory.at(-1)!.temperature.average, null);
+    db.exec('UPDATE devices SET temperature_included=1,included=0,ignored=1');
+    assert.equal(home(db).climate.temperature.average, 12);
+    assert.equal(home(db).climateHistory.at(-1)!.temperature.samples, 2);
+  } finally {
+    db.close();
+  }
+});
+
+test('known temperature sensors and their selections survive missing readings, absence and rediscovery', () => {
+  const db = setup();
+  try {
+    ingestSnapshot(db, 'a', snapshot([sensor('known', 0, 40), sensor('humidity', null, 50)]), at);
+    assert.equal(home(db).devices.find((d) => d.name === 'known')?.hasTemperature, true);
+    assert.equal(home(db).devices.find((d) => d.name === 'humidity')?.hasTemperature, false);
+    db.exec("UPDATE devices SET temperature_included=0 WHERE name='known'");
+    ingestSnapshot(db, 'a', snapshot([sensor('known', null, null, false)]), at + 1000);
+    ingestSnapshot(db, 'a', snapshot([]), at + 2000);
+    const absent = home(db, at + 2000).devices.find((d) => d.name === 'known')!;
+    assert.equal(absent.hasTemperature, true);
+    assert.equal(absent.temperatureIncluded, false);
+    assert.equal(absent.temperature, null);
+    ingestSnapshot(db, 'a', snapshot([sensor('known', 15, 40)]), at + 3000);
+    const rediscovered = home(db, at + 3000);
+    assert.equal(rediscovered.devices.find((d) => d.name === 'known')?.temperatureIncluded, false);
+    assert.equal(rediscovered.climate.temperature.average, null);
+    assert.equal(rediscovered.climateHistory.at(-1)!.temperature.average, null);
+  } finally {
+    db.close();
+  }
+});
+
+test('v9 migration defaults temperature on and preserves selections and observations across restart', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'temperature-selection-'));
+  const path = join(dir, 'db.sqlite');
+  let db = openDatabase(path);
+  try {
+    db.exec("INSERT INTO accounts(id,label,secret) VALUES('a','Account','unused')");
+    ingestSnapshot(db, 'a', snapshot([sensor('one', 20, 40), sensor('two', 24, 50)]), at);
+    db.exec("UPDATE devices SET included=1 WHERE name='one'");
+    db.exec("UPDATE devices SET included=0,ignored=1 WHERE name='two'");
+    if (
+      db
+        .prepare('PRAGMA table_info(devices)')
+        .all()
+        .some((c) => c.name === 'temperature_included')
+    )
+      db.exec('ALTER TABLE devices DROP COLUMN temperature_included');
+    db.exec('DROP INDEX IF EXISTS climate_temperature_devices; PRAGMA user_version=9');
+    db.close();
+    db = openDatabase(path);
+    assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 10);
+    assert.ok(home(db).devices.every((d) => d.temperatureIncluded));
+    assert.equal(home(db).devices.find((d) => d.name === 'one')?.included, true);
+    assert.equal(home(db).devices.find((d) => d.name === 'two')?.ignored, true);
+    db.exec("UPDATE devices SET temperature_included=0 WHERE name='two'");
+    db.close();
+    db = openDatabase(path);
+    assert.equal(home(db).climate.temperature.average, 20);
+    assert.equal(home(db).climateHistory.at(-1)!.temperature.average, 20);
+    assert.equal(home(db).devices.find((d) => d.name === 'two')?.temperature, 24);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM climate_observations').get()?.n, 2);
+  } finally {
+    db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('offline, absent, future and stale readings are missing; zero and negative Celsius remain real', () => {
   const db = setup();
   try {

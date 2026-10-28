@@ -8,18 +8,21 @@ import { messages as estimationMessages } from './locales/estimation';
 import { Badge, EnergyChart, Loading, Notice, PageTitle, Range, SectionTitle } from './components';
 import { DeviceClimate } from './Climate';
 import { DeviceConfiguration } from './DeviceConfiguration';
+import { DeviceSelectionShortcuts } from './DeviceSelection';
 import { DeviceDiagnostics } from './DeviceDiagnostics';
 
 const messages = { ...pageMessages, ...estimationMessages };
 const stateLabels = { on: 'Heating active', off: 'Idle', unknown: 'Heating state unknown' };
 
-export function DevicePage({ id }: { id: string }) {
+type DevicePageProps = { id: string; onMonitoringChanged?: () => void };
+
+export function DevicePage({ id, onMonitoringChanged }: DevicePageProps) {
   // Scope fetching and pending save callbacks to this device, not just the editor.
   // A late response from a previous page must not replace another device's data.
-  return <DevicePageContent key={id} id={id} />;
+  return <DevicePageContent key={id} id={id} onMonitoringChanged={onMonitoringChanged} />;
 }
 
-function DevicePageContent({ id }: { id: string }) {
+function DevicePageContent({ id, onMonitoringChanged }: DevicePageProps) {
   const { t } = useI18n(messages);
   const [days, setDays] = useState(14);
   const { data, error, refresh, setData } = useApi<DeviceDetail>(`/devices/${id}?days=${days}`);
@@ -33,9 +36,13 @@ function DevicePageContent({ id }: { id: string }) {
           device={device}
           days={days}
           setDays={setDays}
-          onRefresh={refresh}
+          onRefresh={() => {
+            refresh();
+            onMonitoringChanged?.();
+          }}
           onSaved={(updated) => {
             setData(updated);
+            onMonitoringChanged?.();
             refresh();
           }}
         />
@@ -227,6 +234,7 @@ export function DeviceDetails({
               )}
             </dl>
           </section>
+          <DeviceSelectionShortcuts device={device} onSaved={onRefresh} />
           {device.measurementError && <Notice tone="error">{t(device.measurementError)}</Notice>}
           {device.energySource === 'estimated' && device.heatingState === 'unknown' && (
             <Notice tone="warning">

@@ -70,6 +70,23 @@ test('home and device cards show localized climate readings including zero humid
   }
 });
 
+test('excluded temperatures stay visible with a localized participation label', () => {
+  const { filled } = fixture();
+  for (const language of ['en', 'pl'] as const) {
+    const html = renderToStaticMarkup(
+      createElement(LanguageProvider, {
+        initialLanguage: language,
+        children: createElement(DeviceList, {
+          devices: filled.devices.map((d) => ({ ...d, temperatureIncluded: false })),
+          onSaved: () => {},
+        }),
+      }),
+    );
+    assert.ok(html.includes(language === 'en' ? 'Excluded from average' : 'Poza średnią'));
+    assert.ok(html.includes(language === 'en' ? '21.5' : '21,5'));
+  }
+});
+
 test('climate summaries and history expose ranges, contributing counts, gaps and localized daily readings', async () => {
   const { ClimateSummaryCards, ClimateHistory } = await import('../src/Climate.js');
   const { filled, empty } = fixture();

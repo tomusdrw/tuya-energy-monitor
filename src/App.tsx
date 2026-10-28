@@ -493,7 +493,9 @@ function Shell({
               onMonitoringChanged={overview.refresh}
             />
           )}
-          {route.startsWith('device/') && <DevicePage id={route.slice(7)} />}
+          {route.startsWith('device/') && (
+            <DevicePage id={route.slice(7)} onMonitoringChanged={overview.refresh} />
+          )}
           {route === 'accounts' && <AccountsPage />}
           {route === 'alerts' && <NotificationsPage />}
           {route === 'settings' && <SettingsPage />}
