@@ -15,7 +15,7 @@ import { emailConfigured, pushConfigured, type Config } from './config.js';
 import { callTuya, sessionSchema, type TuyaCall, type TuyaSession } from './tuya.js';
 import { Collector } from './collector.js';
 import { TuyaStream } from './stream.js';
-import { configureEstimation } from './estimation.js';
+import { configureEstimation, estimationSchema } from './estimation.js';
 import { evaluateNotifications, deliverPending } from './notifications.js';
 import { TuyaAiClient, safeAiError, type AiClient } from './tuya-ai.js';
 import { TuyaAiIntegration, AiConfigurationError } from './tuya-ai-integration.js';
@@ -260,28 +260,44 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
     return { ok: true };
   });
   app.put<{ Params: { id: string } }>('/api/devices/:id', async (request, reply) => {
-    const { included, ignored } = z
-      .object({ included: z.boolean().optional(), ignored: z.boolean().optional() })
+    const { included, ignored, estimation } = z
+      .object({
+        included: z.boolean().optional(),
+        ignored: z.boolean().optional(),
+        estimation: estimationSchema.optional(),
+      })
       .strict()
-      .refine((value) => value.included !== undefined || value.ignored !== undefined)
+      .refine(
+        (value) =>
+          value.included !== undefined ||
+          value.ignored !== undefined ||
+          value.estimation !== undefined,
+      )
       .refine((value) => !(value.included && value.ignored))
       .parse(request.body);
-    const result = db
-      .prepare(
-        `UPDATE devices SET
+    const days = daysSchema.parse((request.query as any).days);
+    const now = Date.now();
+    const result = transaction(db, () => {
+      const updated = db
+        .prepare(
+          `UPDATE devices SET
         included=CASE WHEN ?=1 THEN 0 ELSE COALESCE(?,included) END,
         ignored=CASE WHEN ?=1 THEN 0 ELSE COALESCE(?,ignored) END
         WHERE id=?`,
-      )
-      .run(
-        ignored === undefined ? null : Number(ignored),
-        included === undefined ? null : Number(included),
-        included === undefined ? null : Number(included),
-        ignored === undefined ? null : Number(ignored),
-        request.params.id,
-      );
+        )
+        .run(
+          ignored === undefined ? null : Number(ignored),
+          included === undefined ? null : Number(included),
+          included === undefined ? null : Number(included),
+          ignored === undefined ? null : Number(ignored),
+          request.params.id,
+        );
+      if (updated.changes && estimation)
+        configureEstimation(db, request.params.id, estimation, now);
+      return updated;
+    });
     if (!result.changes) return reply.code(404).send({ error: 'Device not found.' });
-    return { ok: true };
+    return { ok: true, device: getDevice(db, request.params.id, now, days) };
   });
   app.put<{ Params: { id: string } }>('/api/devices/:id/estimation', async (request, reply) => {
     if (!configureEstimation(db, request.params.id, request.body, Date.now()))

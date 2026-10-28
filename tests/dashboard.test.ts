@@ -224,8 +224,8 @@ test('incremental reports render as measured energy without claiming time covera
   }
 });
 
-test('estimation form exposes unknown state and requires a real heating signal without enabling itself', async () => {
-  const { EstimationForm } = await import('../src/EstimationForm.js');
+test('configuration requires a real heating signal without enabling estimation itself', async () => {
+  const { DeviceConfiguration } = await import('../src/DeviceConfiguration.js');
   const { getDevice, ingestSnapshot } = await import('../server/energy.js');
   const db = openDatabase(':memory:');
   const now = Date.now();
@@ -259,13 +259,22 @@ test('estimation form exposes unknown state and requires a real heating signal w
   );
   const d = (db.prepare('SELECT id FROM devices').get() as any).id;
   const html = renderToStaticMarkup(
-    createElement(EstimationForm, { device: getDevice(db, d, now)!, onSaved: () => {} }),
+    createElement(DeviceConfiguration, {
+      device: getDevice(db, d, now)!,
+      days: 14,
+      onSaved: () => {},
+      onCancel: () => {},
+      onRefresh: () => {},
+    }),
   );
-  assert.ok(html.includes('Heating state unknown'));
   assert.ok(html.includes('Heating power (kW)'));
   assert.ok(html.includes('switch'));
   assert.ok(html.includes('Turning the thermostat on'));
-  assert.ok(!html.includes('checked=""'), 'Estimation must not enable itself');
+  assert.doesNotMatch(
+    html.match(/<input(?=[^>]*name="estimationEnabled")[^>]*>/)![0],
+    /checked/,
+    'Estimation must not enable itself',
+  );
   assert.ok(html.includes('No recognized heating signal was found.'));
   assert.match(html, /type="checkbox" disabled=""/);
   db.close();

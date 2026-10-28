@@ -99,6 +99,58 @@ async function setup() {
   return { db, app, headers, update, device, overview, ...fixture };
 }
 
+const estimation = {
+  enabled: true,
+  ratedPowerKw: 1.25,
+  heatingCode: 'work_state',
+  onValues: ['heating'],
+  offValues: ['idle'],
+  temperature: null,
+};
+
+test('device configuration saves participation and estimation together and returns the saved state', async () => {
+  const f = await setup();
+  try {
+    await f.update({ ignored: true });
+    const response = await f.update({ included: true, estimation });
+    assert.equal(response.statusCode, 200);
+    const saved = response.json().device;
+    assert.equal(saved.included, true);
+    assert.equal(saved.ignored, false);
+    assert.equal(saved.estimation.ratedPowerKw, 1.25);
+    assert.equal(saved.estimation.enabled, true);
+    const revision = saved.estimation.revision;
+    assert.equal((await f.update({ included: false, estimation })).statusCode, 200);
+    assert.equal((await f.device()).estimation.revision, revision);
+    assert.equal((await f.device()).included, false);
+  } finally {
+    await f.app.close();
+  }
+});
+
+test('invalid estimation and storage failures leave the entire device configuration unchanged', async () => {
+  const f = await setup();
+  try {
+    const before = await f.device();
+    const invalid = await f.update({
+      included: false,
+      estimation: { ...estimation, ratedPowerKw: -1 },
+    });
+    assert.equal(invalid.statusCode, 400);
+    assert.equal((await f.device()).included, before.included);
+    assert.equal((await f.device()).estimation.revision, before.estimation.revision);
+    f.db.exec(`CREATE TRIGGER reject_configuration BEFORE INSERT ON heating_observations
+      BEGIN SELECT RAISE(ABORT, 'fixture storage failure'); END`);
+    assert.equal((await f.update({ included: false, estimation })).statusCode, 500);
+    const after = await f.device();
+    assert.equal(after.included, before.included);
+    assert.equal(after.estimation.enabled, before.estimation.enabled);
+    assert.equal(after.estimation.revision, before.estimation.revision);
+  } finally {
+    await f.app.close();
+  }
+});
+
 test('ignoring removes a device from totals while preserving its history and survives synchronization', async () => {
   const f = await setup();
   try {

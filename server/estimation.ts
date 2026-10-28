@@ -95,7 +95,7 @@ export function configureEstimation(
   now: number,
 ): boolean {
   const config = estimationSchema.parse(input);
-  return transaction(db, () => {
+  const save = () => {
     const device = db.prepare('SELECT * FROM devices WHERE id=?').get(id) as Row | undefined;
     if (!device) return false;
     if (JSON.stringify(config) === JSON.stringify(estimationConfig(device))) return true;
@@ -127,7 +127,8 @@ export function configureEstimation(
       config.ratedPowerKw,
     );
     return true;
-  });
+  };
+  return db.isTransaction ? save() : transaction(db, save);
 }
 
 /** Caller may wrap this in a snapshot transaction. Duplicate/out-of-order samples are ignored. */

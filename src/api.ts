@@ -45,5 +45,5 @@ export function useApi<T>(url: string) {
     const timer = setInterval(refresh, 30000);
     return () => clearInterval(timer);
   }, [refresh]);
-  return { data, error, refresh };
+  return { data, error, refresh, setData };
 }

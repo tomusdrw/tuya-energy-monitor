@@ -1,6 +1,18 @@
 import type { Messages } from '../../shared/i18n';
 
 export const messages: Messages = {
+  Edit: 'Edytuj',
+  Save: 'Zapisz',
+  Cancel: 'Anuluj',
+  'Device configuration': 'Konfiguracja urządzenia',
+  'Edit monitoring settings': 'Edycja ustawień monitorowania',
+  'Changes take effect only after saving.': 'Zmiany zostaną zastosowane dopiero po zapisaniu.',
+  'Current device state': 'Aktualny stan urządzenia',
+  'Heating state': 'Stan grzania',
+  'Cumulative reading': 'Odczyt narastający',
+  'Energy source': 'Źródło energii',
+  'Configure estimation in Edit.': 'Skonfiguruj estymację przez „Edytuj”.',
+  'How this energy is calculated': 'Jak obliczamy zużycie',
   'Switch apartment': 'Przełącz mieszkanie',
   'Previous apartment': 'Poprzednie mieszkanie',
   'Next apartment': 'Następne mieszkanie',

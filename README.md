@@ -99,6 +99,15 @@ These choices are saved on the server and survive synchronization. Existing devi
 are not automatically marked ignored, and ignoring never deletes their history.
 
 Accounts and devices remain scoped to their account, even if names match.
+Device details open as a read-only overview of current readings, heating state,
+energy source and monitoring participation, followed by history. **Edit** opens
+the device configuration. **Save** applies monitoring participation and estimation
+together; **Cancel** discards the draft. Background refreshes do not replace a draft,
+and a failed save keeps it available for correction or retry. Raw fields and
+observations are available under **Technical details**.
+Leaving the device page discards unsaved changes too. **Detect again** refreshes
+available fields while preserving your edits and explicitly accepted suggestions.
+
 Background collection refreshes inventory and energy counters every five minutes,
 and polls native power meters and enabled runtime estimators every 60 seconds
 in batches of 20 devices.
@@ -500,6 +509,14 @@ For live editing, run `npm run dev` and `npm run dev:ui` separately, and use
 `APP_ORIGIN=http://localhost:5173` for the Vite browser origin. A production build
 serves frontend and API from the single Node process. `npm run format` formats
 the source. No tests send emails or issue device commands.
+
+Device editing interaction tests run as part of `npm test`, or separately with
+`node --import tsx --test tests/device-editing.test.ts`. They mount the real React
+components in Happy DOM and replace only the HTTP boundary, covering draft lifetime,
+Save/Cancel, failures, polling, probes and navigation. Happy DOM is a development-only
+dependency; these tests do not verify layout, so responsive changes still need a
+browser check. See the [device details maintenance notes](docs/superpowers/plans/2026-10-28-device-details.md#maintenance-notes)
+before changing the editor or save endpoint.
 
 For interface copy, use English source messages with Polish translations in
 `src/locales/` and the `useI18n` hook for text, dates and numbers. System error

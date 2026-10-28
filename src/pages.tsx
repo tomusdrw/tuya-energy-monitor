@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import type {
   AccountView,
-  DeviceDetail,
   HomeDetail,
   HomeView,
   NotificationView,
@@ -20,11 +19,10 @@ import type {
   SettingsView,
 } from '../shared/types';
 import { api, useApi } from './api';
-import { EstimationForm } from './EstimationForm';
 import { TuyaAiForm } from './TuyaAiForm';
 import { DeviceList } from './DeviceList';
 import { HomeSwitcher } from './HomeSwitcher';
-import { ClimateHistory, ClimateSummaryCards, DeviceClimate } from './Climate';
+import { ClimateHistory, ClimateSummaryCards } from './Climate';
 import { useI18n } from './i18n';
 import { messages } from './locales/pages';
 import { pushMessages } from './locales/push';
@@ -285,154 +283,7 @@ export function HomePage({
   );
 }
 
-export function DevicePage({ id }: { id: string }) {
-  const { t, number, date, percent, energyNumber } = useI18n(messages);
-  const [days, setDays] = useState(14),
-    [busy, setBusy] = useState(false),
-    [notice, setNotice] = useState('');
-  const { data: device, error, refresh } = useApi<DeviceDetail>(`/devices/${id}?days=${days}`);
-  if (error) return <Notice tone="error">{t(error)}</Notice>;
-  if (!device) return <Loading />;
-  async function toggle(included: boolean) {
-    setBusy(true);
-    setNotice('');
-    try {
-      await api(`/devices/${id}`, 'PUT', { included });
-      refresh();
-    } catch (e) {
-      setNotice((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <>
-      <a href={`#home/${device.homeId}`} className="back-link">
-        <ArrowLeft size={16} />
-        {device.homeName}
-      </a>
-      <PageTitle
-        title={device.name}
-        subtitle={t('{home} · last cloud reading: {date}', {
-          home: device.homeName,
-          date: date(device.lastSeen),
-        })}
-      >
-        <Badge tone={device.fresh ? 'success' : 'warning'}>
-          {device.fresh ? t('Online') : t('Offline or stale readings')}
-        </Badge>
-      </PageTitle>
-      {notice && <Notice tone="error">{t(notice)}</Notice>}
-      <div className="stats-grid three">
-        <div className="stat featured">
-          <span>{t('Observed today')}</span>
-          <strong>
-            {energyNumber(device.stats)} <small>kWh</small>
-          </strong>
-          <EnergyBreakdown stats={device.stats} />
-          <p>{t('{coverage} time coverage', { coverage: percent(device.stats.coverage) })}</p>
-        </div>
-        <div className="stat">
-          <span>
-            {device.energySource === 'power'
-              ? t('Current power')
-              : device.energyKind === 'incremental'
-                ? t('Report reception')
-                : t('Meter reading')}
-          </span>
-          {device.energySource === 'power' ? (
-            <>
-              <strong>
-                {number(device.powerW, 1)} <small>W</small>
-              </strong>
-              <p>{t('Reading provided by the device')}</p>
-            </>
-          ) : device.energyKind === 'incremental' ? (
-            <>
-              <strong>{device.reportingConnected ? t('Connected') : t('Disconnected')}</strong>
-              <p>{t('Last report: {date}', { date: date(device.lastEnergyReport) })}</p>
-            </>
-          ) : (
-            <>
-              <strong>
-                {number(device.counterKwh, 3)} <small>kWh</small>
-              </strong>
-              <p>{t("The device's cumulative meter, not daily usage")}</p>
-            </>
-          )}
-        </div>
-        <div className="stat">
-          <span>{t('Current conditions')}</span>
-          <DeviceClimate device={device} detailed />
-        </div>
-      </div>
-      {device.measurementProvider && (
-        <Notice tone={device.fresh ? undefined : 'warning'}>
-          {t('Measurement source: {source} · last reading: {date}', {
-            source: device.measurementProvider === 'tuya_ai' ? 'Tuya.ai' : 'QR',
-            date: date(device.measurementAt),
-          })}
-          {device.measurementProvider === 'tuya_ai' && (
-            <>
-              {' '}
-              {t(
-                'The first reading is a baseline. Usage is calculated from subsequent valid readings; earlier Smart Life history is not imported.',
-              )}
-            </>
-          )}
-          {device.measurementError && <> {t(device.measurementError)}</>}
-        </Notice>
-      )}
-      {device.energyKind === 'incremental' && (
-        <Notice tone={device.reportingConnected ? undefined : 'warning'}>
-          {t(
-            'We add up energy reports received live. Repeated copies of the same report do not increase usage. Interruptions can leave gaps; earlier reports are not recovered. Point reports do not establish time coverage, so the total remains partial.',
-          )}
-          {device.lastEnergyReport === null && <> {t('Waiting for the first energy report.')}</>}
-        </Notice>
-      )}
-      {device.energySource === 'missing' && (
-        <Notice tone="warning">
-          {t(
-            'The current Tuya connection does not provide an energy meter for this device. You can configure estimation below using a heating signal or current and target temperatures.',
-          )}
-        </Notice>
-      )}
-      <div className="panel">
-        <SectionTitle title={t('Device history')}>
-          <Range days={days} setDays={setDays} />
-        </SectionTitle>
-        <EnergyChart points={device.history} />
-      </div>
-      <div className="panel">
-        <SectionTitle
-          title={t('Monitoring participation')}
-          subtitle={t('Include devices that heat the apartment.')}
-        />
-        {device.ignored && (
-          <Notice>
-            {t('This device is ignored. Enabling monitoring also restores it to the device list.')}
-          </Notice>
-        )}
-        <label className="check-label">
-          <input
-            type="checkbox"
-            checked={device.included}
-            disabled={busy}
-            onChange={(e) => void toggle(e.target.checked)}
-          />
-          {t('Include in apartment total and alert rules')}
-        </label>
-        <p className="field-help">
-          {t(
-            'A device without readings is marked as a missing part of the total. Changing the selection also recalculates history for the current set of devices.',
-          )}
-        </p>
-      </div>
-      <EstimationForm key={device.id} device={device} onSaved={refresh} />
-    </>
-  );
-}
+export { DevicePage } from './DevicePage';
 
 export function AccountsPage() {
   const { t, number, date } = useI18n(messages);
