@@ -547,6 +547,16 @@ function deviceView(db: DatabaseSync, d: Row, now: number): DeviceView {
     category: d.category,
     included: Boolean(d.included),
     ignored: Boolean(d.ignored),
+    temperatureIncluded: Boolean(d.temperature_included),
+    hasTemperature:
+      d.temperature !== null ||
+      Boolean(
+        db
+          .prepare(
+            'SELECT 1 FROM climate_observations WHERE device_id=? AND temperature IS NOT NULL LIMIT 1',
+          )
+          .get(d.id),
+      ),
     online: Boolean(d.measurement_provider === 'tuya_ai' ? d.measurement_online : d.online),
     present: Boolean(d.present),
     fresh:

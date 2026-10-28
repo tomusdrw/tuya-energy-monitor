@@ -260,18 +260,20 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
     return { ok: true };
   });
   app.put<{ Params: { id: string } }>('/api/devices/:id', async (request, reply) => {
-    const { included, ignored, estimation } = z
+    const { included, ignored, estimation, temperatureIncluded } = z
       .object({
         included: z.boolean().optional(),
         ignored: z.boolean().optional(),
         estimation: estimationSchema.optional(),
+        temperatureIncluded: z.boolean().optional(),
       })
       .strict()
       .refine(
         (value) =>
           value.included !== undefined ||
           value.ignored !== undefined ||
-          value.estimation !== undefined,
+          value.estimation !== undefined ||
+          value.temperatureIncluded !== undefined,
       )
       .refine((value) => !(value.included && value.ignored))
       .parse(request.body);
@@ -282,7 +284,8 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
         .prepare(
           `UPDATE devices SET
         included=CASE WHEN ?=1 THEN 0 ELSE COALESCE(?,included) END,
-        ignored=CASE WHEN ?=1 THEN 0 ELSE COALESCE(?,ignored) END
+        ignored=CASE WHEN ?=1 THEN 0 ELSE COALESCE(?,ignored) END,
+        temperature_included=COALESCE(?,temperature_included)
         WHERE id=?`,
         )
         .run(
@@ -290,6 +293,7 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
           included === undefined ? null : Number(included),
           included === undefined ? null : Number(included),
           ignored === undefined ? null : Number(ignored),
+          temperatureIncluded === undefined ? null : Number(temperatureIncluded),
           request.params.id,
         );
       if (updated.changes && estimation)

@@ -40,11 +40,14 @@ function summarize(values: Contribution[]): ClimateMetric {
 }
 
 export function currentClimate(devices: Row[], now: number): ClimateSummary {
-  const readings = devices.map((d) => climateReading(d, now));
+  const readings = devices.map((d) => ({
+    ...climateReading(d, now),
+    temperatureIncluded: Boolean(d.temperature_included),
+  }));
   const metric = (key: 'temperature' | 'humidity') =>
     summarize(
       readings.flatMap((r) =>
-        r[key] === null
+        r[key] === null || (key === 'temperature' && !r.temperatureIncluded)
           ? []
           : [
               {
@@ -76,6 +79,7 @@ export function climateForPeriod(
       COUNT(*) AS samples, MIN(at) AS oldestObservedAt, MAX(at) AS latestObservedAt
     FROM climate_observations
     WHERE home_id=? AND at>=? AND at<? AND ${key} IS NOT NULL
+      ${key === 'temperature' ? 'AND EXISTS (SELECT 1 FROM devices WHERE id=climate_observations.device_id AND temperature_included=1)' : ''}
     GROUP BY device_id
   `,
         )

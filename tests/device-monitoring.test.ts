@@ -151,6 +151,59 @@ test('invalid estimation and storage failures leave the entire device configurat
   }
 });
 
+test('temperature participation has independent authenticated updates and strict validation', async () => {
+  const f = await setup();
+  try {
+    const sensor = getHome(f.db, f.homeId, f.now)!.devices.find((d) => d.name === 'Sensor')!;
+    assert.equal((await f.update({ temperatureIncluded: false }, sensor.id)).statusCode, 200);
+    const detail = getHome(f.db, f.homeId, f.now)!;
+    assert.equal(detail.climate.temperature.average, null);
+    assert.equal(detail.climateHistory.at(-1)!.temperature.average, null);
+    assert.equal(detail.stats.kwh, 1.25);
+    assert.equal(detail.devices.find((d) => d.id === sensor.id)?.temperature, 21);
+    assert.equal((await f.update({ ignored: true }, sensor.id)).statusCode, 200);
+    assert.equal((await f.update({ temperatureIncluded: true }, sensor.id)).statusCode, 200);
+    const restored = getHome(f.db, f.homeId, f.now)!.devices.find((d) => d.id === sensor.id)!;
+    assert.equal(restored.ignored, true);
+    assert.equal(restored.included, false);
+    assert.equal(restored.temperatureIncluded, true);
+    assert.equal(
+      (await f.update({ included: true, temperatureIncluded: false }, sensor.id)).statusCode,
+      200,
+    );
+    assert.equal(
+      getHome(f.db, f.homeId, f.now)!.devices.find((d) => d.id === sensor.id)?.ignored,
+      false,
+    );
+    for (const payload of [
+      { temperatureIncluded: null },
+      { temperatureIncluded: 0 },
+      { temperatureIncluded: 'false' },
+      { temperatureIncluded: true, extra: 1 },
+    ])
+      assert.equal((await f.update(payload, sensor.id)).statusCode, 400);
+    assert.equal((await f.update({ temperatureIncluded: true }, 'missing')).statusCode, 404);
+    for (const [headers, status] of [
+      [{ origin: config.origin }, 401],
+      [{ ...f.headers, origin: 'https://evil.example' }, 403],
+    ] as const) {
+      const result = await f.app.inject({
+        method: 'PUT',
+        url: `/api/devices/${sensor.id}`,
+        headers,
+        payload: { temperatureIncluded: true },
+      });
+      assert.equal(result.statusCode, status);
+    }
+    assert.equal(
+      getHome(f.db, f.homeId, f.now)!.devices.find((d) => d.id === sensor.id)?.temperatureIncluded,
+      false,
+    );
+  } finally {
+    await f.app.close();
+  }
+});
+
 test('ignoring removes a device from totals while preserving its history and survives synchronization', async () => {
   const f = await setup();
   try {
@@ -275,7 +328,7 @@ test('v5 migration preserves selections, energy and Tuya.ai configuration and pe
 
     const migrated = openDatabase(path);
     try {
-      assert.equal(migrated.prepare('PRAGMA user_version').get()?.user_version, 9);
+      assert.equal(migrated.prepare('PRAGMA user_version').get()?.user_version, 10);
       const home = getHome(migrated, f.homeId, f.now + 1)!;
       assert.equal(home.devices.find((d) => d.id === f.id)?.included, true);
       assert.equal(home.devices.find((d) => d.name === 'Sensor')?.included, false);

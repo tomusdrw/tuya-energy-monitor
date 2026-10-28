@@ -233,7 +233,7 @@ test('v1 database migrates additively, preserves credentials/readings/intervals 
     old.close();
     for (let i = 0; i < 2; i++) {
       const db = openDatabase(path);
-      assert.equal((db.prepare('PRAGMA user_version').get() as any).user_version, 9);
+      assert.equal((db.prepare('PRAGMA user_version').get() as any).user_version, 10);
       assert.equal((db.prepare('SELECT secret FROM accounts').get() as any).secret, 'encrypted');
       const interval = db.prepare('SELECT * FROM intervals').get() as any;
       assert.equal(interval.source, 'measured');
@@ -264,7 +264,7 @@ test('released v6 database gains temperature estimation without losing ignored d
     for (let i = 0; i < 2; i++) {
       const db = openDatabase(path);
       try {
-        assert.equal(db.prepare('PRAGMA user_version').get()!.user_version, 9);
+        assert.equal(db.prepare('PRAGMA user_version').get()!.user_version, 10);
         assert.equal(db.prepare('SELECT secret FROM accounts').get()!.secret, 'encrypted');
         const d = db.prepare('SELECT * FROM devices').get()!;
         assert.equal(d.ignored, 1);
