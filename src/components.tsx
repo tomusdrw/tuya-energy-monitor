@@ -14,6 +14,7 @@ import { useI18n } from './i18n';
 import { componentMessages } from './locales/components';
 import { ClimateCompact } from './Climate';
 import { pushMessages } from './locales/push';
+import { InteractiveChart } from './InteractiveChart';
 
 export function Brand() {
   return (
@@ -164,8 +165,25 @@ export function Range({ days, setDays }: { days: number; setDays: (days: number)
   );
 }
 
+function EnergyReading({ point }: { point: HistoryPoint }) {
+  const { t, number, percent, energyNumber } = useI18n(componentMessages);
+  return (
+    <>
+      <strong>{point.kwh === null ? t('No data') : `${energyNumber(point)} kWh`}</strong>
+      <span>{t('Measured: {energy} kWh', { energy: number(point.measuredKwh) })}</span>
+      {point.powerKwh !== null && (
+        <span>{t('From power: {energy} kWh', { energy: number(point.powerKwh) })}</span>
+      )}
+      {point.estimatedKwh !== null && (
+        <span>{t('Estimated: {energy} kWh', { energy: number(point.estimatedKwh) })}</span>
+      )}
+      <span>{t('Time coverage: {coverage}', { coverage: percent(point.coverage) })}</span>
+    </>
+  );
+}
+
 export function EnergyChart({ points }: { points: HistoryPoint[] }) {
-  const { t, number, percent, day, energyNumber } = useI18n(componentMessages);
+  const { t, number, day } = useI18n(componentMessages);
   const container = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(720);
   const hasData = points.some((p) => p.kwh !== null);
@@ -193,10 +211,15 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
     labelStep = Math.ceil(points.length / Math.max(1, Math.floor((width - pad) / 65)));
   return (
     <div className="energy-chart" ref={container}>
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        role="img"
-        aria-label={t('Daily energy usage in kilowatt-hours')}
+      <InteractiveChart
+        width={width}
+        height={height}
+        label={t('Daily energy usage in kilowatt-hours')}
+        plot={{ left: pad, right: width - 15, top: 20, bottom: 175 }}
+        points={points.map((point) => ({
+          day: point.day,
+          content: <EnergyReading point={point} />,
+        }))}
       >
         {[0, 0.5, 1].map((v) => (
           <g key={v}>
@@ -219,21 +242,6 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
           const h = Math.max(p.kwh === null ? 2 : 3, ((p.kwh ?? 0) / max) * chartHeight);
           return (
             <g key={p.day}>
-              <title>
-                {t(
-                  '{day}: {total}; measured: {measured} kWh; estimated: {estimated} kWh; coverage: {coverage}',
-                  {
-                    day: day(p.day),
-                    total: p.kwh === null ? t('No data') : `${energyNumber(p)} kWh`,
-                    measured: number(p.measuredKwh),
-                    estimated: number(p.estimatedKwh),
-                    coverage: percent(p.coverage),
-                  },
-                ) +
-                  (p.powerKwh !== null
-                    ? `; ${t('From power: {energy} kWh', { energy: number(p.powerKwh) })}`
-                    : '')}
-              </title>
               {p.kwh === null ? (
                 <rect
                   x={pad + i * slot + slot * 0.2}
@@ -293,7 +301,7 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
             </g>
           );
         })}
-      </svg>
+      </InteractiveChart>
       <div className="chart-legend">
         <span>
           <i className="legend-blue" />
@@ -322,17 +330,7 @@ export function EnergyChart({ points }: { points: HistoryPoint[] }) {
                 <time dateTime={point.day}>{day(point.day)}</time>
               </dt>
               <dd>
-                <strong>{point.kwh === null ? t('No data') : `${energyNumber(point)} kWh`}</strong>
-                <span>{t('Measured: {energy} kWh', { energy: number(point.measuredKwh) })}</span>
-                {point.powerKwh !== null && (
-                  <span>{t('From power: {energy} kWh', { energy: number(point.powerKwh) })}</span>
-                )}
-                {point.estimatedKwh !== null && (
-                  <span>
-                    {t('Estimated: {energy} kWh', { energy: number(point.estimatedKwh) })}
-                  </span>
-                )}
-                <span>{t('Time coverage: {coverage}', { coverage: percent(point.coverage) })}</span>
+                <EnergyReading point={point} />
               </dd>
             </div>
           ))}

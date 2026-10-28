@@ -912,6 +912,44 @@ nav a.active {
   min-height: 220px;
   display: block;
 }
+.interactive-chart {
+  position: relative;
+}
+.chart-hit-area {
+  fill: transparent;
+  pointer-events: all;
+}
+.chart-hit-area.active {
+  fill: #245ae80a;
+}
+.chart-hit-area:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+.chart-tooltip {
+  position: absolute;
+  top: 8px;
+  z-index: 1;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: #202d43;
+  box-shadow: 0 4px 16px #162a4b24;
+  font-size: 12px;
+  pointer-events: none;
+}
+.chart-tooltip time,
+.chart-tooltip strong,
+.chart-tooltip span {
+  display: block;
+}
+.chart-tooltip time {
+  margin-bottom: 4px;
+  color: var(--muted);
+}
 .chart-grid {
   stroke: #e9edf4;
   stroke-width: 1;
