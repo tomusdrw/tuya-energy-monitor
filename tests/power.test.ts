@@ -9,7 +9,7 @@ import { configureEstimation, ingestHeatingSnapshot } from '../server/estimation
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Dashboard } from '../src/App.js';
-import { EstimationForm } from '../src/EstimationForm.js';
+import { DeviceDetails } from '../src/DevicePage.js';
 import { LanguageProvider } from '../src/i18n.js';
 import { evaluateNotifications } from '../server/notifications.js';
 
@@ -267,15 +267,16 @@ test('power totals, chart and automatic monitoring panel identify the source in 
       const panel = renderToStaticMarkup(
         createElement(LanguageProvider, {
           initialLanguage: language,
-          children: createElement(EstimationForm, {
+          children: createElement(DeviceDetails, {
             device: getDevice(f.db, f.id(), start + minute)!,
             onSaved: () => {},
+            days: 14,
+            setDays: () => {},
+            onRefresh: () => {},
           }),
         }),
       );
-      assert.ok(
-        panel.includes(language === 'en' ? 'Energy from measured power' : 'Energia z pomiaru mocy'),
-      );
+      assert.ok(panel.includes(language === 'en' ? 'From measured power' : 'Z pomiaru mocy'));
       assert.ok(
         !panel.includes('<input'),
         'No rated power or heating signal configuration is required',

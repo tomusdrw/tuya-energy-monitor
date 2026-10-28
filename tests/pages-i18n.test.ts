@@ -4,7 +4,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { LanguageProvider } from '../src/i18n.js';
 import { AccountsPage, NotificationsPage } from '../src/pages.js';
-import { EstimationForm } from '../src/EstimationForm.js';
+import { DeviceConfiguration } from '../src/DeviceConfiguration.js';
 import { openDatabase } from '../server/db.js';
 import { getDevice, ingestSnapshot } from '../server/energy.js';
 
@@ -69,7 +69,13 @@ test('estimation uses the selected language and number format while preserving r
       const html = renderToStaticMarkup(
         createElement(LanguageProvider, {
           initialLanguage: language,
-          children: createElement(EstimationForm, { device, onSaved: () => {} }),
+          children: createElement(DeviceConfiguration, {
+            device,
+            days: 14,
+            onSaved: () => {},
+            onCancel: () => {},
+            onRefresh: () => {},
+          }),
         }),
       );
       assert.ok(
@@ -81,7 +87,10 @@ test('estimation uses the selected language and number format while preserving r
       assert.ok(html.includes(language === 'en' ? '1.25' : '1,25'));
       assert.ok(html.includes('work_state'));
       assert.ok(html.includes('&quot;heating&quot;'));
-      assert.ok(!html.includes('checked=""'));
+      assert.doesNotMatch(
+        html.match(/<input(?=[^>]*name="estimationEnabled")[^>]*>/)![0],
+        /checked/,
+      );
       assert.match(html, /<select[^>]*name="heatingCode"/);
       assert.match(html, /<select[^>]*name="state-0"/);
       assert.match(html, /<select[^>]*name="state-1"/);
@@ -91,7 +100,13 @@ test('estimation uses the selected language and number format while preserving r
     device.estimation.onValues = [1];
     device.estimation.offValues = ['1', false];
     const saved = renderToStaticMarkup(
-      createElement(EstimationForm, { device, onSaved: () => {} }),
+      createElement(DeviceConfiguration, {
+        device,
+        days: 14,
+        onSaved: () => {},
+        onCancel: () => {},
+        onRefresh: () => {},
+      }),
     );
     assert.match(saved, /<option value="custom_relay" selected=""/);
     assert.ok(saved.includes('The selected field is absent from the latest reading.'));
@@ -114,7 +129,13 @@ test('estimation uses the selected language and number format while preserving r
       const temperatureHtml = renderToStaticMarkup(
         createElement(LanguageProvider, {
           initialLanguage: language,
-          children: createElement(EstimationForm, { device, onSaved: () => {} }),
+          children: createElement(DeviceConfiguration, {
+            device,
+            days: 14,
+            onSaved: () => {},
+            onCancel: () => {},
+            onRefresh: () => {},
+          }),
         }),
       );
       assert.match(temperatureHtml, /<option value="temperature" selected=""/);
@@ -127,7 +148,10 @@ test('estimation uses the selected language and number format while preserving r
       );
       assert.ok(temperatureHtml.includes('21'));
       assert.ok(temperatureHtml.includes('22'));
-      assert.ok(!temperatureHtml.includes('checked=""'));
+      assert.doesNotMatch(
+        temperatureHtml.match(/<input(?=[^>]*name="estimationEnabled")[^>]*>/)![0],
+        /checked/,
+      );
     }
   } finally {
     db.close();
@@ -170,7 +194,13 @@ test('estimation explains measured precedence for cumulative and incremental dev
         const html = renderToStaticMarkup(
           createElement(LanguageProvider, {
             initialLanguage: language,
-            children: createElement(EstimationForm, { device, onSaved: () => {} }),
+            children: createElement(DeviceConfiguration, {
+              device,
+              days: 14,
+              onSaved: () => {},
+              onCancel: () => {},
+              onRefresh: () => {},
+            }),
           }),
         );
         assert.ok(

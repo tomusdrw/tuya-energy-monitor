@@ -1,6 +1,9 @@
 import type { Messages } from '../../shared/i18n';
 
 export const messages: Messages = {
+  'Estimation changes apply to future readings. Recorded readings remain unchanged.':
+    'Zmiany estymacji dotyczą przyszłych odczytów. Zapisane odczyty pozostają bez zmian.',
+  'Technical details': 'Szczegóły techniczne',
   'Estimation method': 'Metoda estymacji',
   'Heating signal': 'Sygnał grzania',
   'Temperature comparison': 'Porównanie temperatur',
