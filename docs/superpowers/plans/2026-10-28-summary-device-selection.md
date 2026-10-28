@@ -1,6 +1,6 @@
 # Summary Device Selection Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Configure heating and temperature participation next to apartment summaries with independent saved selections.
 
@@ -31,11 +31,11 @@
 
 **Interfaces:** DeviceView exposes `temperatureIncluded: boolean` and `hasTemperature: boolean`; PUT `/api/devices/:id` accepts optional `temperatureIncluded` alongside existing fields.
 
-- [ ] Add failing tests for current/history exclusion, unchanged individual readings and humidity, empty selection, persistence, capability after missing readings, API validation/authentication and migration defaults.
-- [ ] Run `node --import tsx --test tests/climate.test.ts tests/device-monitoring.test.ts`; confirm new assertions fail before implementation.
-- [ ] Add schema v10, strict endpoint validation, capability metadata and temperature-only filtering.
-- [ ] Update older migration reconstruction tests and run `npm test`; expect all tests passing.
-- [ ] Commit backend changes and tests.
+- [x] Add failing tests for current/history exclusion, unchanged individual readings and humidity, empty selection, persistence, capability after missing readings, API validation/authentication and migration defaults.
+- [x] Run `node --import tsx --test tests/climate.test.ts tests/device-monitoring.test.ts`; confirm new assertions fail before implementation.
+- [x] Add schema v10, strict endpoint validation, capability metadata and temperature-only filtering.
+- [x] Update older migration reconstruction tests and run `npm test`; expect all tests passing.
+- [x] Commit backend changes and tests.
 
 ### Task 2: Shared picker and participation displays
 
@@ -43,18 +43,24 @@
 
 **Interfaces:** `DeviceSelection({homeId, mode: 'energy' | 'temperature', onSaved})` opens the shared picker; a separately exported selection list renders candidate devices for SSR tests.
 
-- [ ] Add failing localized render tests for picker candidates/selected states, zero/stale readings, passive list participation and removal of switches.
-- [ ] Run the focused UI tests and confirm the intended failures.
-- [ ] Implement accessible native dialog, immediate saves with busy/error state and parent refresh, controls on summaries, shared shortcuts on device details, and responsive CSS.
-- [ ] Run focused UI tests and `npm run build`; expect success.
-- [ ] Commit UI changes and tests.
+- [x] Add failing localized render tests for picker candidates/selected states, zero/stale readings, passive list participation and removal of switches.
+- [x] Run the focused UI tests and confirm the intended failures.
+- [x] Implement accessible native dialog, immediate saves with busy/error state and parent refresh, controls on summaries, shared shortcuts on device details, and responsive CSS.
+- [x] Run focused UI tests and `npm run build`; expect success.
+- [x] Commit UI changes and tests.
 
 ### Task 3: Integration verification and PR
 
 **Files:** `README.md` and documentation above; review the whole branch.
 
-- [ ] Update README for selection behavior, current-selection history and schema v10.
-- [ ] Run full Node tests, Python bridge tests, build and formatting/diff checks.
-- [ ] Exercise both pickers against a seeded local app in the collaborative browser: independent selections, failures, empty selection, stale sensors, reloading, keyboard focus, mobile layout and detail shortcuts.
-- [ ] Obtain one independent whole-branch review and resolve important findings with regression coverage.
+- [x] Update README for selection behavior, current-selection history and schema v10.
+- [x] Run full Node tests, Python bridge tests, build and formatting/diff checks.
+- [x] Exercise both pickers against a seeded local app in the collaborative browser: independent selections, failures, empty selection, stale sensors, reloading, keyboard focus and detail shortcuts. Check mobile sizing against the responsive dialog CSS.
+- [x] Obtain one independent whole-branch review and resolve important findings with regression coverage.
 - [ ] Commit final changes, push the feature branch, open and link the PR to this thread.
+
+## Verification after rebase
+
+- Rebase onto `7fd8174` preserves the new read-only device view and atomic configuration editor.
+- `tests/device-selection-interaction.test.ts` reuses the DOM harness added on main to cover pending focus, duplicate-save prevention, dismissal/reopening and failed-save recovery. Both pending-state regressions were first reproduced against the pre-fix implementation.
+- `tests/device-monitoring.test.ts` verifies temperature participation composes with estimation updates and rolls back with them on storage failure.

@@ -8,12 +8,18 @@ import { useI18n } from './i18n';
 import { selectionMessages } from './locales/selection';
 
 type SelectionMode = 'energy' | 'temperature';
-type ListProps = { devices: DeviceView[]; mode: SelectionMode; onSaved: () => void };
+type ListProps = {
+  devices: DeviceView[];
+  mode: SelectionMode;
+  onSaved: () => void;
+  onSavingChange?: (saving: boolean) => void;
+};
 
 function SelectionRow({
   device,
   mode,
   onSaved,
+  onSavingChange,
 }: Omit<ListProps, 'devices'> & { device: DeviceView }) {
   const { t, number, energyNumber } = useI18n(selectionMessages);
   const selected = mode === 'energy' ? device.included : device.temperatureIncluded;
@@ -27,6 +33,7 @@ function SelectionRow({
   async function update(value: boolean) {
     if (saving.current) return;
     saving.current = true;
+    onSavingChange?.(true);
     setBusy(true);
     setError('');
     try {
@@ -42,6 +49,7 @@ function SelectionRow({
     } finally {
       saving.current = false;
       setBusy(false);
+      onSavingChange?.(false);
     }
   }
 
@@ -51,7 +59,7 @@ function SelectionRow({
         <input
           type="checkbox"
           checked={included}
-          disabled={busy}
+          aria-disabled={busy}
           aria-busy={busy}
           aria-label={t(
             mode === 'energy'
@@ -104,13 +112,19 @@ function SelectionRow({
   );
 }
 
-export function DeviceSelectionList({ devices, mode, onSaved }: ListProps) {
+export function DeviceSelectionList({ devices, mode, onSaved, onSavingChange }: ListProps) {
   const { t } = useI18n(selectionMessages);
   const candidates = mode === 'temperature' ? devices.filter((d) => d.hasTemperature) : devices;
   return candidates.length ? (
     <div className="selection-list">
       {candidates.map((device) => (
-        <SelectionRow key={device.id} device={device} mode={mode} onSaved={onSaved} />
+        <SelectionRow
+          key={device.id}
+          device={device}
+          mode={mode}
+          onSaved={onSaved}
+          onSavingChange={onSavingChange}
+        />
       ))}
     </div>
   ) : (
@@ -122,15 +136,27 @@ export function DeviceSelectionList({ devices, mode, onSaved }: ListProps) {
 
 type Props = { homeId: string; mode: SelectionMode; onSaved: () => void };
 
-function SelectionDialog({ homeId, mode, onSaved, onClose }: Props & { onClose: () => void }) {
+function SelectionDialog({
+  homeId,
+  mode,
+  onSaved,
+  onClose,
+  open,
+  onSavingChange,
+}: Props & {
+  onClose: () => void;
+  open: boolean;
+  onSavingChange: (saving: boolean) => void;
+}) {
   const { t } = useI18n(selectionMessages);
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const helpId = useId();
   const { data, error, refresh } = useApi<HomeDetail>(`/homes/${homeId}?days=1`);
   useEffect(() => {
-    if (!dialog.current?.open) dialog.current?.showModal();
-  }, []);
+    if (open && !dialog.current?.open) dialog.current?.showModal();
+    else if (!open && dialog.current?.open) dialog.current.close();
+  }, [open]);
   return createPortal(
     <dialog
       ref={dialog}
@@ -170,6 +196,7 @@ function SelectionDialog({ homeId, mode, onSaved, onClose }: Props & { onClose: 
         <DeviceSelectionList
           devices={data.devices}
           mode={mode}
+          onSavingChange={onSavingChange}
           onSaved={() => {
             refresh();
             onSaved();
@@ -189,6 +216,7 @@ function SelectionDialog({ homeId, mode, onSaved, onClose }: Props & { onClose: 
 export function DeviceSelection({ homeId, mode, onSaved }: Props) {
   const { t } = useI18n(selectionMessages);
   const [open, setOpen] = useState(false);
+  const [pendingSaves, setPendingSaves] = useState(0);
   return (
     <>
       <button
@@ -200,11 +228,14 @@ export function DeviceSelection({ homeId, mode, onSaved }: Props) {
         <Settings2 size={15} aria-hidden="true" />
         {t(mode === 'energy' ? 'Choose devices' : 'Choose sensors')}
       </button>
-      {open && (
+      {/* Keep in-flight saves and row locks alive when the dialog is closed and reopened. */}
+      {(open || pendingSaves > 0) && (
         <SelectionDialog
           homeId={homeId}
           mode={mode}
           onSaved={onSaved}
+          open={open}
+          onSavingChange={(saving) => setPendingSaves((count) => count + (saving ? 1 : -1))}
           onClose={() => setOpen(false)}
         />
       )}

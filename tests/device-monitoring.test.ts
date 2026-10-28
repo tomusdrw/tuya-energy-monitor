@@ -112,11 +112,12 @@ test('device configuration saves participation and estimation together and retur
   const f = await setup();
   try {
     await f.update({ ignored: true });
-    const response = await f.update({ included: true, estimation });
+    const response = await f.update({ included: true, estimation, temperatureIncluded: false });
     assert.equal(response.statusCode, 200);
     const saved = response.json().device;
     assert.equal(saved.included, true);
     assert.equal(saved.ignored, false);
+    assert.equal(saved.temperatureIncluded, false);
     assert.equal(saved.estimation.ratedPowerKw, 1.25);
     assert.equal(saved.estimation.enabled, true);
     const revision = saved.estimation.revision;
@@ -134,6 +135,7 @@ test('invalid estimation and storage failures leave the entire device configurat
     const before = await f.device();
     const invalid = await f.update({
       included: false,
+      temperatureIncluded: false,
       estimation: { ...estimation, ratedPowerKw: -1 },
     });
     assert.equal(invalid.statusCode, 400);
@@ -141,9 +143,13 @@ test('invalid estimation and storage failures leave the entire device configurat
     assert.equal((await f.device()).estimation.revision, before.estimation.revision);
     f.db.exec(`CREATE TRIGGER reject_configuration BEFORE INSERT ON heating_observations
       BEGIN SELECT RAISE(ABORT, 'fixture storage failure'); END`);
-    assert.equal((await f.update({ included: false, estimation })).statusCode, 500);
+    assert.equal(
+      (await f.update({ included: false, estimation, temperatureIncluded: false })).statusCode,
+      500,
+    );
     const after = await f.device();
     assert.equal(after.included, before.included);
+    assert.equal(after.temperatureIncluded, before.temperatureIncluded);
     assert.equal(after.estimation.enabled, before.estimation.enabled);
     assert.equal(after.estimation.revision, before.estimation.revision);
   } finally {

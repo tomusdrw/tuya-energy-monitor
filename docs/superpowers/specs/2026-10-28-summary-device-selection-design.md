@@ -20,3 +20,7 @@ The initial proposal allowed a per-device checkbox, but editing devices individu
 ## Implementation choices
 
 Persist one boolean in schema v10; expose temperature capability based on retained readings/history. Extend the existing authenticated device update endpoint. Keep the current aggregation rules and freshness cutoff, filtering only the selected temperature contributors. Do not add dependencies, remote heater control, new notification types or group configuration.
+
+## Integration with main
+
+Rebased onto #16 (separate device details and explicit configuration editing). Preserve its existing Edit/Save/Cancel workflow and atomic configuration endpoint; add the shared picker shortcuts to the new read-only detail view. Temperature updates compose with estimation updates in the same transaction.

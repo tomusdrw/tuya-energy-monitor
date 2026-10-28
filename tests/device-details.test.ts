@@ -26,6 +26,8 @@ test('device details open as a localized read-only overview with diagnostics col
   for (const language of ['en', 'pl'] as const) {
     const html = render(deviceFixture(), language);
     assert.doesNotMatch(html, /<(input|select|form)\b/);
+    assert.ok(html.includes(language === 'en' ? 'Choose devices' : 'Wybierz urządzenia'));
+    assert.ok(html.includes(language === 'en' ? 'Choose sensors' : 'Wybierz czujniki'));
     assert.match(html, new RegExp(`>${language === 'en' ? 'Edit' : 'Edytuj'}<`));
     assert.ok(html.includes(language === 'en' ? '21.5' : '21,5'));
     assert.ok(html.includes(language === 'en' ? '0.0' : '0,0'));
