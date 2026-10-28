@@ -41,6 +41,13 @@ export const messages: Messages = {
   'Settings for this apartment only': 'Ustawienia tylko dla tego mieszkania',
   'Daily energy threshold': 'Dzienny próg energii',
   'No threshold': 'Brak progu',
+  Enabled: 'Włączone',
+  Disabled: 'Wyłączone',
+  'Edit rules to set a daily threshold.': 'Kliknij „Edytuj”, aby ustawić próg dzienny.',
+  'Alert when daily usage exceeds this threshold, at most once a day.':
+    'Alert po przekroczeniu tego progu zużycia dziennego, najwyżej raz dziennie.',
+  'These conditions are saved but alerts are disabled.':
+    'Warunki są zapisane, ale alerty są wyłączone.',
   'An email is sent when the threshold is exceeded, at most once a day. Leave blank to disable this alert.':
     'E-mail po przekroczeniu progu, najwyżej raz dziennie. Puste pole wyłącza ten alert.',
   'Detect unusual usage': 'Wykrywaj nietypowe zużycie',

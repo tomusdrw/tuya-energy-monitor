@@ -1,21 +1,10 @@
 import { useState, type FormEvent } from 'react';
-import {
-  ArrowLeft,
-  ChevronRight,
-  Link2,
-  Plus,
-  ShieldCheck,
-  Mail,
-  Clock3,
-  Settings2,
-  Save,
-} from 'lucide-react';
+import { ArrowLeft, ChevronRight, Link2, Plus, ShieldCheck, Mail, Clock3 } from 'lucide-react';
 import type {
   AccountView,
   HomeDetail,
   HomeView,
   NotificationView,
-  Rules,
   SettingsView,
 } from '../shared/types';
 import { api, useApi } from './api';
@@ -23,6 +12,7 @@ import { TuyaAiForm } from './TuyaAiForm';
 import { DeviceList } from './DeviceList';
 import { DeviceSelection } from './DeviceSelection';
 import { HomeSwitcher } from './HomeSwitcher';
+import { NotificationRules } from './NotificationRules';
 import { ClimateHistory, ClimateSummaryCards } from './Climate';
 import { useI18n } from './i18n';
 import { messages } from './locales/pages';
@@ -42,132 +32,6 @@ import {
   SectionTitle,
 } from './components';
 
-function RulesForm({ home, onSaved }: { home: HomeDetail; onSaved: () => void }) {
-  const { t } = useI18n(messages);
-  const [rules, setRules] = useState<Rules>(home.rules),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState(''),
-    [saved, setSaved] = useState(false);
-  const change = (value: Partial<Rules>) => {
-    setRules((r) => ({ ...r, ...value }));
-    setSaved(false);
-  };
-  async function save(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      await api(`/homes/${home.id}/rules`, 'PUT', rules);
-      setSaved(true);
-      onSaved();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <form className="panel rules-form" onSubmit={save}>
-      <SectionTitle
-        title={t('Notification rules')}
-        subtitle={t('Settings for this apartment only')}
-      >
-        <Settings2 size={21} />
-      </SectionTitle>
-      {error && <Notice tone="error">{t(error)}</Notice>}
-      <div className="rules-grid">
-        <div>
-          <label>
-            {t('Daily energy threshold')} <span className="field-unit">kWh</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0.1"
-              max="100000"
-              step="0.1"
-              placeholder={t('No threshold')}
-              value={rules.dailyLimit ?? ''}
-              onChange={(e) =>
-                change({ dailyLimit: e.target.value === '' ? null : Number(e.target.value) })
-              }
-            />
-          </label>
-          <p className="field-help">
-            {t(
-              'An email is sent when the threshold is exceeded, at most once a day. Leave blank to disable this alert.',
-            )}
-          </p>
-        </div>
-        <div>
-          <label className="check-label">
-            <input
-              type="checkbox"
-              checked={rules.anomalyEnabled}
-              onChange={(e) => change({ anomalyEnabled: e.target.checked })}
-            />
-            {t('Detect unusual usage')}
-          </label>
-          <p className="field-help">
-            {t(
-              'Compares usage at the same time on previous days. Requires at least 7 days with sufficient data.',
-            )}
-          </p>
-        </div>
-      </div>
-      <fieldset disabled={!rules.anomalyEnabled} className="anomaly-fields">
-        <legend>{t('Anomaly detection conditions')}</legend>
-        <label>
-          {t('Comparison window (days)')}
-          <input
-            type="number"
-            inputMode="numeric"
-            min="7"
-            max="90"
-            step="1"
-            value={rules.windowDays}
-            required
-            onChange={(e) => change({ windowDays: Number(e.target.value) })}
-          />
-        </label>
-        <label>
-          {t('Increase over average (%)')}
-          <input
-            type="number"
-            inputMode="numeric"
-            min="1"
-            max="10000"
-            value={rules.increasePercent}
-            required
-            onChange={(e) => change({ increasePercent: Number(e.target.value) })}
-          />
-        </label>
-        <label>
-          {t('Minimum increase (kWh)')}
-          <input
-            type="number"
-            inputMode="decimal"
-            min="0.1"
-            max="100000"
-            step="0.1"
-            value={rules.increaseKwh}
-            required
-            onChange={(e) => change({ increaseKwh: Number(e.target.value) })}
-          />
-        </label>
-      </fieldset>
-      <div className="form-footer">
-        <span role="status" className="saved-message">
-          {saved ? t('Settings saved.') : t('Both increase conditions must be met.')}
-        </span>
-        <button className="button primary" disabled={busy}>
-          <Save size={16} />
-          {busy ? t('Saving…') : t('Save rules')}
-        </button>
-      </div>
-    </form>
-  );
-}
-
 export function HomePage({
   id,
   homes,
@@ -179,7 +43,7 @@ export function HomePage({
 }) {
   const { t, number, percent, energyNumber } = useI18n(messages);
   const [days, setDays] = useState(14),
-    { data, error, refresh } = useApi<HomeDetail>(`/homes/${id}?days=${days}`);
+    { data, error, refresh, setData } = useApi<HomeDetail>(`/homes/${id}?days=${days}`);
   const home = data?.id === id ? data : null;
   const selectedHome = home ?? homes.find((item) => item.id === id);
   const selectionSaved = () => {
@@ -214,10 +78,9 @@ export function HomePage({
           </Badge>
         )}
       </PageTitle>
-      {error ? (
-        <Notice tone="error">{t(error)}</Notice>
-      ) : !home ? (
-        <Loading />
+      {error && <Notice tone="error">{t(error)}</Notice>}
+      {!home ? (
+        !error && <Loading />
       ) : (
         <>
           <div className="stats-grid three">
@@ -291,7 +154,14 @@ export function HomePage({
               }}
             />
           </div>
-          <RulesForm key={home.id} home={home} onSaved={refresh} />
+          <NotificationRules
+            key={home.id}
+            home={home}
+            onSaved={(rules) => {
+              setData((current) => (current?.id === home.id ? { ...current, rules } : current));
+              refresh();
+            }}
+          />
         </>
       )}
     </>
