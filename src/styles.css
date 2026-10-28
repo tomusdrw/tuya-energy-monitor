@@ -1274,6 +1274,57 @@ nav a.active {
 .device-row.inactive > svg {
   color: inherit;
 }
+.rules-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 20px;
+}
+.rule-card {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.rule-card-heading,
+.rules-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.rule-card-heading h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.rule-threshold {
+  margin: 22px 0;
+  font-size: 28px;
+  font-weight: 650;
+}
+.rule-threshold small {
+  font-size: 14px;
+  font-weight: 450;
+}
+.rule-conditions {
+  display: grid;
+  gap: 12px;
+  margin: 22px 0;
+}
+.rule-conditions > div {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rule-conditions dt {
+  font-size: 12px;
+  color: #65748b;
+}
+.rule-conditions dd {
+  margin: 0;
+  font-weight: 650;
+}
 .rules-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
