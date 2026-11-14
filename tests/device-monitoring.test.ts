@@ -334,7 +334,7 @@ test('v5 migration preserves selections, energy and Tuya.ai configuration and pe
 
     const migrated = openDatabase(path);
     try {
-      assert.equal(migrated.prepare('PRAGMA user_version').get()?.user_version, 10);
+      assert.equal(migrated.prepare('PRAGMA user_version').get()?.user_version, 11);
       const home = getHome(migrated, f.homeId, f.now + 1)!;
       assert.equal(home.devices.find((d) => d.id === f.id)?.included, true);
       assert.equal(home.devices.find((d) => d.name === 'Sensor')?.included, false);

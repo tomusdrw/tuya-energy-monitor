@@ -100,7 +100,23 @@ export interface HomeView {
   deviceCount: number;
   climate: ClimateSummary;
 }
+export interface HomeLocation {
+  label: string;
+  latitude: number;
+  longitude: number;
+}
+export interface OutdoorPoint {
+  day: string;
+  average: number | null;
+  forecast: boolean;
+}
+export interface OutdoorWeather {
+  location: HomeLocation | null;
+  points: OutdoorPoint[];
+  updatedAt: number | null;
+}
 export interface HomeDetail extends HomeView {
+  location: HomeLocation | null;
   devices: DeviceView[];
   history: HistoryPoint[];
   climateHistory: ClimateHistoryPoint[];

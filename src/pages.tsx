@@ -13,7 +13,9 @@ import { DeviceList } from './DeviceList';
 import { DeviceSelection } from './DeviceSelection';
 import { HomeSwitcher } from './HomeSwitcher';
 import { NotificationRules } from './NotificationRules';
-import { ClimateHistory, ClimateSummaryCards } from './Climate';
+import { ClimateSummaryCards } from './Climate';
+import { HomeLocation } from './HomeLocation';
+import { OutdoorWeather } from './OutdoorWeather';
 import { useI18n } from './i18n';
 import { messages } from './locales/pages';
 import { pushMessages } from './locales/push';
@@ -131,7 +133,22 @@ export function HomePage({
             <SectionTitle title={t('Climate history')}>
               <Range days={days} setDays={setDays} />
             </SectionTitle>
-            <ClimateHistory points={home.climateHistory} />
+            <HomeLocation
+              homeId={home.id}
+              location={home.location}
+              onSaved={(location) => {
+                setData((current) =>
+                  current?.id === home.id ? { ...current, location } : current,
+                );
+                refresh();
+              }}
+            />
+            <OutdoorWeather
+              homeId={home.id}
+              location={home.location}
+              days={days}
+              points={home.climateHistory}
+            />
           </div>
           <div className="panel">
             <SectionTitle title={t('Apartment history')}>

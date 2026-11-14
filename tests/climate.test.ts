@@ -142,7 +142,7 @@ test('v9 migration defaults temperature on and preserves selections and observat
     db.exec('DROP INDEX IF EXISTS climate_temperature_devices; PRAGMA user_version=9');
     db.close();
     db = openDatabase(path);
-    assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 10);
+    assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 11);
     assert.ok(home(db).devices.every((d) => d.temperatureIncluded));
     assert.equal(home(db).devices.find((d) => d.name === 'one')?.included, true);
     assert.equal(home(db).devices.find((d) => d.name === 'two')?.ignored, true);

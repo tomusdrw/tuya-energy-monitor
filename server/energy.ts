@@ -1,3 +1,4 @@
+import { homeLocation } from './location.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { Temporal } from '@js-temporal/polyfill';
 import { z } from 'zod';
@@ -617,6 +618,7 @@ export function getHome(db: DatabaseSync, id: string, now: number, days = 14): H
   const devices = devicesFor(db, id);
   return {
     ...homeView(db, home, now),
+    location: homeLocation(db, id),
     devices: devices.map((d) => deviceView(db, d, now)),
     history: history(db, devices, now, days),
     climateHistory: Array.from({ length: days }, (_, i) => {

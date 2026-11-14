@@ -5,6 +5,7 @@ import type {
   ClimateMetric,
   ClimateSummary,
   DeviceView,
+  OutdoorPoint,
 } from '../shared/types';
 import { useI18n } from './i18n';
 import { messages } from './locales/climate';
@@ -122,8 +123,10 @@ export function ClimateSummaryCards({
 function MetricChart({
   points,
   metric,
+  outdoor = [],
 }: {
-  points: ClimateHistoryPoint[];
+  outdoor?: OutdoorPoint[];
+  points: (ClimateHistoryPoint & { future?: boolean })[];
   metric: (typeof metrics)[number];
 }) {
   const { t, number, day } = useI18n(messages);
@@ -138,8 +141,12 @@ function MetricChart({
     return () => observer.disconnect();
   }, []);
   const values = points.map((p) => p[metric]).filter((v) => v.average !== null);
-  const low = values.length ? Math.floor(Math.min(...values.map((v) => v.minimum!))) - 1 : 0;
-  const high = values.length ? Math.ceil(Math.max(...values.map((v) => v.maximum!))) + 1 : 1;
+  const outside = new Map(outdoor.map((p) => [p.day, p]));
+  const outsideValues = outdoor.flatMap((p) => (p.average === null ? [] : [p.average]));
+  const minima = [...values.map((v) => v.minimum!), ...outsideValues];
+  const maxima = [...values.map((v) => v.maximum!), ...outsideValues];
+  const low = minima.length ? Math.floor(Math.min(...minima)) - 1 : 0;
+  const high = maxima.length ? Math.ceil(Math.max(...maxima)) + 1 : 1;
   const x = (i: number) => 48 + ((width - 68) * (i + 0.5)) / points.length;
   const y = (v: number) => 175 - ((v - low) / (high - low)) * 140;
   const step = Math.max(1, Math.ceil(points.length / Math.max(1, Math.floor((width - 68) / 60))));
@@ -147,7 +154,23 @@ function MetricChart({
   return (
     <div className={`climate-chart ${metric}`} ref={container}>
       <h3>{label}</h3>
-      {!values.length ? (
+      {!!outdoor.length && (
+        <div className="outdoor-legend">
+          <span>
+            <i className="indoor-key" />
+            {t('Indoor average')}
+          </span>
+          <span>
+            <i />
+            {t('Outdoor average')}
+          </span>
+          <span>
+            <i className="forecast-key" />
+            {t('Forecast')}
+          </span>
+        </div>
+      )}
+      {!minima.length ? (
         <p className="climate-help">{t('No readings')}</p>
       ) : (
         <InteractiveChart
@@ -157,7 +180,12 @@ function MetricChart({
           plot={{ left: 48, right: width - 20, top: 35, bottom: 180 }}
           points={points.map((point) => ({
             day: point.day,
-            content: <DailyMetric value={point[metric]} metric={metric} />,
+            content: (
+              <>
+                {!point.future && <DailyMetric value={point[metric]} metric={metric} />}
+                {outside.has(point.day) && <DailyOutdoor point={outside.get(point.day)!} />}
+              </>
+            ),
           }))}
         >
           {[low, (low + high) / 2, high].map((tick) => (
@@ -168,6 +196,31 @@ function MetricChart({
               </text>
             </g>
           ))}
+          {points.map((point, i) => {
+            const value = outside.get(point.day);
+            const previous = i > 0 ? outside.get(points[i - 1].day) : undefined;
+            if (value?.average == null) return null;
+            return (
+              <g key={`outside-${point.day}`}>
+                {previous?.average != null && (
+                  <line
+                    x1={x(i - 1)}
+                    y1={y(previous.average)}
+                    x2={x(i)}
+                    y2={y(value.average)}
+                    className={value.forecast ? 'outdoor-line outdoor-forecast' : 'outdoor-line'}
+                    strokeDasharray={value.forecast ? '6 4' : undefined}
+                  />
+                )}
+                <circle
+                  cx={x(i)}
+                  cy={y(value.average)}
+                  r={3}
+                  className={value.forecast ? 'outdoor-dot outdoor-forecast' : 'outdoor-dot'}
+                />
+              </g>
+            );
+          })}
           {points.map((point, i) => {
             const value = point[metric];
             return (
@@ -183,11 +236,11 @@ function MetricChart({
                     />
                     <circle cx={x(i)} cy={y(value.average)} r={4} className="climate-point" />
                   </>
-                ) : (
+                ) : !point.future ? (
                   <text x={x(i)} y={179} textAnchor="middle" className="chart-label">
                     —
                   </text>
-                )}
+                ) : null}
                 {((i % step === 0 && i < points.length - step) || i === points.length - 1) && (
                   <text x={x(i)} y={201} textAnchor="middle" className="chart-label">
                     {day(point.day)}
@@ -236,8 +289,44 @@ function DailyMetric({
   );
 }
 
-export function ClimateHistory({ points }: { points: ClimateHistoryPoint[] }) {
+function DailyOutdoor({ point }: { point: OutdoorPoint }) {
+  const { t, number } = useI18n(messages);
+  return (
+    <div className="daily-outdoor">
+      <strong>
+        {t('Outdoor average')}
+        {point.forecast ? ` · ${t('Forecast')}` : ''}
+      </strong>
+      <span>{point.average === null ? t('No readings') : `${number(point.average, 1)} °C`}</span>
+    </div>
+  );
+}
+const emptyMetric: ClimateMetric = {
+  average: null,
+  minimum: null,
+  maximum: null,
+  count: 0,
+  samples: 0,
+  oldestObservedAt: null,
+  latestObservedAt: null,
+};
+
+export function ClimateHistory({
+  points,
+  outdoor = [],
+}: {
+  points: ClimateHistoryPoint[];
+  outdoor?: OutdoorPoint[];
+}) {
   const { t, day } = useI18n(messages);
+  const outside = new Map(outdoor.map((point) => [point.day, point]));
+  const lastDay = points.at(-1)?.day;
+  const temperaturePoints = [
+    ...points,
+    ...outdoor
+      .filter((p) => !lastDay || p.day > lastDay)
+      .map((p) => ({ day: p.day, temperature: emptyMetric, humidity: emptyMetric, future: true })),
+  ];
   return (
     <>
       <p className="climate-help">
@@ -247,7 +336,12 @@ export function ClimateHistory({ points }: { points: ClimateHistoryPoint[] }) {
       </p>
       <div className="climate-grid">
         {metrics.map((metric) => (
-          <MetricChart key={metric} metric={metric} points={points} />
+          <MetricChart
+            key={metric}
+            metric={metric}
+            points={metric === 'temperature' ? temperaturePoints : points}
+            outdoor={metric === 'temperature' ? outdoor : []}
+          />
         ))}
       </div>
       <p className="climate-help">
@@ -258,13 +352,15 @@ export function ClimateHistory({ points }: { points: ClimateHistoryPoint[] }) {
       <details className="history-details">
         <summary>{t('View daily climate readings')}</summary>
         <dl className="climate-daily-values">
-          {points.map((point) => (
+          {temperaturePoints.map((point) => (
             <div key={point.day}>
               <dt>{day(point.day)}</dt>
               <dd>
-                {metrics.map((metric) => (
-                  <DailyMetric key={metric} metric={metric} value={point[metric]} />
-                ))}
+                {!('future' in point) &&
+                  metrics.map((metric) => (
+                    <DailyMetric key={metric} metric={metric} value={point[metric]} />
+                  ))}
+                {outside.has(point.day) && <DailyOutdoor point={outside.get(point.day)!} />}
               </dd>
             </div>
           ))}

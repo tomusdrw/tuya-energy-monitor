@@ -1,6 +1,9 @@
 import type { Messages } from '../../shared/i18n';
 
 export const messages: Messages = {
+  'Indoor average': 'Średnia w mieszkaniu',
+  'Outdoor average': 'Średnia na zewnątrz',
+  Forecast: 'Prognoza',
   'Excluded from average': 'Poza średnią',
   'Temperature uses selected sensors; humidity uses all available sensors. Each sensor has equal weight, independently of energy selection. Offline devices and readings older than 15 minutes are omitted.':
     'Temperatura uwzględnia wybrane czujniki, a wilgotność wszystkie dostępne. Każdy czujnik ma równą wagę, niezależnie od wyboru do zużycia energii. Pomijamy urządzenia offline i odczyty starsze niż 15 minut.',
