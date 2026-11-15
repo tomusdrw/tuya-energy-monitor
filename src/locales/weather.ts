@@ -2,8 +2,15 @@ import type { Messages } from '../../shared/i18n';
 export const messages: Messages = {
   'Weather data by Open-Meteo': 'Dane pogodowe: Open-Meteo',
   'Apartment location': 'Lokalizacja mieszkania',
-  'No location selected. Add an address to see outdoor temperatures and the forecast.':
-    'Nie wybrano lokalizacji. Dodaj adres, aby zobaczyć temperaturę zewnętrzną i prognozę.',
+  'Set location': 'Ustaw lokalizację',
+  Close: 'Zamknij',
+  'Used for outdoor temperatures and the forecast.':
+    'Do temperatury zewnętrznej i prognozy pogody.',
+  'Choose an address to compare indoor temperatures with the weather outside.':
+    'Wybierz adres, aby porównać temperaturę w mieszkaniu z pogodą na zewnątrz.',
+  'Street and city': 'Ulica i miejscowość',
+  'Enter at least 3 characters, then search.': 'Wpisz co najmniej 3 znaki i wyszukaj adres.',
+  'Search results': 'Wyniki wyszukiwania',
   'Edit location': 'Edytuj lokalizację',
   Address: 'Adres',
   'Search by street and city. The search is sent to Photon; only coordinates are sent to the weather service.':
@@ -25,7 +32,7 @@ export const messages: Messages = {
   'Weather is unavailable. Please try again.': 'Dane pogodowe są niedostępne. Spróbuj ponownie.',
   'Loading outdoor weather…': 'Wczytywanie pogody zewnętrznej…',
   'Retry weather': 'Ponów pobieranie pogody',
-  'Outdoor data: {address}. Updated: {date}.': 'Dane zewnętrzne: {address}. Aktualizacja: {date}.',
+  'Outdoor data updated: {date}.': 'Aktualizacja danych zewnętrznych: {date}.',
   'Outdoor temperatures are daily model averages, including archived forecasts for past days. Today and the next three days are forecasts (dashed line), not sensor readings.':
     'Temperatury zewnętrzne to dzienne średnie z modeli pogodowych, w tym archiwalnych prognoz dla minionych dni. Dzisiaj i kolejne trzy dni to prognoza (linia przerywana), a nie odczyty czujników.',
 };

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { act, createElement } from 'react';
+import { act, createElement, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { mount, click, change, window, deferred } from './helpers/dom.js';
 import { ClimateHistory } from '../src/Climate.js';
@@ -60,6 +60,18 @@ test('chart extends only temperature by three days, distinguishes forecast and d
   }
 });
 
+async function toggleLocation() {
+  const trigger = window.document.querySelector('button[aria-label="Apartment location"]');
+  assert.ok(trigger, 'Saved location has an accessible disclosure button');
+  await act(async () => trigger.click());
+}
+
+async function editLocation() {
+  await toggleLocation();
+  await click('Edit location');
+  assert.ok(window.document.querySelector('dialog[open]'), 'Editing opens a modal dialog');
+}
+
 test('location starts as summary; search does not save, cancel discards draft and refresh preserves it', async (t) => {
   const writes: string[] = [];
   t.mock.method(globalThis, 'fetch', async (url: string, init: RequestInit) => {
@@ -70,14 +82,15 @@ test('location starts as summary; search does not save, cancel discards draft an
   const ui = await mount(createElement(HomeLocation, props));
   t.after(ui.unmount);
   assert.equal(ui.container.querySelector('input'), null);
-  await click('Edit location');
+  assert.ok(!ui.container.textContent.includes('Warszawa'));
+  await editLocation();
   await change('input[name="address"]', 'Kraków');
   await click('Search address');
   await click('Kraków');
   await ui.render(
     createElement(HomeLocation, { ...props, location: { ...location, label: 'Refreshed' } }),
   );
-  assert.match(ui.container.textContent, /Selected location: Kraków/);
+  assert.match(window.document.querySelector('dialog')!.textContent, /Selected location: Kraków/);
   assert.equal(writes.length, 0);
   await click('Cancel');
   assert.match(ui.container.textContent, /Refreshed/);
@@ -104,23 +117,29 @@ test('failed location save keeps draft, blocks duplicate submission, then succee
     }),
   );
   t.after(ui.unmount);
-  await click('Edit location');
+  await editLocation();
   await change('input[name="address"]', 'Kraków');
   await click('Search address');
   await click('Kraków');
   await click('Save location');
   await act(async () =>
-    ui.container
+    window.document
       .querySelector('form')!
       .dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })),
   );
   assert.equal(writes, 1);
+  await act(async () =>
+    window.document
+      .querySelector('dialog')!
+      .dispatchEvent(new window.Event('cancel', { cancelable: true })),
+  );
+  assert.ok(window.document.querySelector('dialog'), 'Cannot dismiss an in-flight save');
   await act(async () => pending.resolve(Response.json({ error: 'Save failed' }, { status: 503 })));
-  assert.match(ui.container.textContent, /Save failed/);
-  assert.match(ui.container.textContent, /Selected location: Kraków/);
+  assert.match(window.document.querySelector('dialog')!.textContent, /Save failed/);
+  assert.match(window.document.querySelector('dialog')!.textContent, /Selected location: Kraków/);
   await click('Save location');
   assert.deepEqual(saved, other);
-  assert.equal(ui.container.querySelector('form'), null);
+  assert.equal(window.document.querySelector('dialog'), null);
 });
 
 test('switching apartments discards drafts and ignores late search results', async (t) => {
@@ -129,12 +148,14 @@ test('switching apartments discards drafts and ignores late search results', asy
   const props = { homeId: 'a', location, onSaved: () => {} };
   const ui = await mount(createElement(HomeLocation, props));
   t.after(ui.unmount);
-  await click('Edit location');
+  await editLocation();
   await change('input[name="address"]', 'Old search');
   await click('Search address');
   await ui.render(createElement(HomeLocation, { ...props, homeId: 'b', location: other }));
   await act(async () => pending.resolve(Response.json([location])));
   assert.equal(ui.container.querySelector('input'), null);
+  assert.equal(window.document.querySelector('dialog'), null);
+  await toggleLocation();
   assert.match(ui.container.textContent, /Kraków/);
   assert.ok(!ui.container.textContent.includes('Warszawa'));
 });
@@ -181,8 +202,9 @@ test('weather for a previous location is ignored after a location change', async
   await act(async () =>
     pending.resolve(Response.json({ location, points: outdoor, updatedAt: 123 })),
   );
-  assert.match(ui.container.textContent, /Outdoor data: Kraków/);
-  assert.ok(!ui.container.textContent.includes('Outdoor data: Warszawa'));
+  assert.match(ui.container.textContent, /Outdoor data updated:/);
+  assert.ok(!ui.container.textContent.includes('Kraków'));
+  assert.ok(!ui.container.textContent.includes('Warszawa'));
   assert.ok(!ui.container.textContent.includes('-5.0'));
 });
 
@@ -206,4 +228,99 @@ test('no saved location makes no weather request; provider failure keeps indoor 
   assert.equal(calls, 2);
   assert.ok(!ui.container.textContent.includes('Weather is unavailable'));
   assert.ok(ui.container.querySelector('.outdoor-forecast'));
+});
+
+test('location popover dismisses on Escape and outside interaction; dialog cancellation discards draft', async (t) => {
+  const ui = await mount(createElement(HomeLocation, { homeId: 'a', location, onSaved: () => {} }));
+  t.after(ui.unmount);
+  await toggleLocation();
+  assert.match(ui.container.textContent, /Warszawa/);
+  await act(async () =>
+    window.document.dispatchEvent(
+      new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    ),
+  );
+  assert.ok(!ui.container.textContent.includes('Warszawa'));
+  assert.equal(window.document.activeElement?.getAttribute('aria-label'), 'Apartment location');
+  await toggleLocation();
+  await act(async () =>
+    window.document.body.dispatchEvent(new window.Event('pointerdown', { bubbles: true })),
+  );
+  assert.ok(!ui.container.textContent.includes('Warszawa'));
+  await editLocation();
+  await change('input[name="address"]', 'Unsaved address');
+  await act(async () =>
+    window.document
+      .querySelector('dialog')!
+      .dispatchEvent(new window.Event('cancel', { cancelable: true })),
+  );
+  assert.equal(window.document.querySelector('dialog'), null);
+  await click('Edit location');
+  assert.equal(window.document.querySelector('input')?.value, 'Warszawa');
+});
+
+test('missing location offers a localized explicit setup action and cancellation returns focus', async (t) => {
+  const ui = await mount(
+    createElement(LanguageProvider, {
+      initialLanguage: 'pl',
+      children: createElement(HomeLocation, { homeId: 'a', location: null, onSaved: () => {} }),
+    }),
+  );
+  t.after(ui.unmount);
+  assert.equal(window.document.querySelector('dialog'), null);
+  await click('Ustaw lokalizację');
+  const dialog = window.document.querySelector('dialog[open]');
+  assert.ok(dialog);
+  assert.match(dialog.textContent, /Lokalizacja mieszkania/);
+  assert.equal(
+    window.document.querySelector('button[type="submit"]')?.hasAttribute('disabled'),
+    true,
+  );
+  await click('Anuluj');
+  await act(async () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  assert.equal(window.document.activeElement?.textContent, 'Ustaw lokalizację');
+});
+
+test('creating and removing a location updates the summary only after save', async (t) => {
+  const writes: unknown[] = [];
+  t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => {
+    if (init.method !== 'PUT') return Response.json([other]);
+    const body = JSON.parse(String(init.body));
+    writes.push(body);
+    return Response.json(body);
+  });
+  function SavedLocation() {
+    const [saved, setSaved] = useState<typeof location | null>(null);
+    return createElement(HomeLocation, { homeId: 'a', location: saved, onSaved: setSaved });
+  }
+  const ui = await mount(createElement(SavedLocation));
+  t.after(ui.unmount);
+  await click('Set location');
+  await change('input[name="address"]', 'Kraków');
+  await click('Search address');
+  await click('Kraków');
+  assert.equal(writes.length, 0);
+  await click('Save location');
+  assert.deepEqual(writes, [{ location: other }]);
+  assert.equal(window.document.querySelector('dialog'), null);
+  assert.match(ui.container.textContent, /Kraków/);
+  await act(async () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  assert.equal(window.document.activeElement?.getAttribute('aria-label'), 'Apartment location');
+  await click('Edit location');
+  await click('Remove location');
+  assert.match(
+    window.document.querySelector('dialog')!.textContent,
+    /will be disabled after saving/,
+  );
+  await click('Cancel');
+  assert.equal(writes.length, 1);
+  assert.match(ui.container.textContent, /Kraków/);
+  await click('Edit location');
+  await click('Remove location');
+  await click('Save location');
+  assert.deepEqual(writes, [{ location: other }, { location: null }]);
+  assert.ok(!ui.container.textContent.includes('Kraków'));
+  assert.equal(window.document.querySelector('dialog'), null);
+  await act(async () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  assert.equal(window.document.activeElement?.textContent, 'Set location');
 });
