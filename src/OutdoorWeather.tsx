@@ -48,8 +48,7 @@ function WeatherHistory({ homeId, location, days, points }: Props) {
       </p>
       {matching && data?.updatedAt && (
         <p className="climate-help">
-          {t('Outdoor data: {address}. Updated: {date}.', {
-            address: location!.label,
+          {t('Outdoor data updated: {date}.', {
             date: date(data.updatedAt),
           })}
         </p>

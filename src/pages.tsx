@@ -131,18 +131,20 @@ export function HomePage({
           />
           <div className="panel">
             <SectionTitle title={t('Climate history')}>
-              <Range days={days} setDays={setDays} />
+              <div className="climate-history-controls">
+                <Range days={days} setDays={setDays} />
+                <HomeLocation
+                  homeId={home.id}
+                  location={home.location}
+                  onSaved={(location) => {
+                    setData((current) =>
+                      current?.id === home.id ? { ...current, location } : current,
+                    );
+                    refresh();
+                  }}
+                />
+              </div>
             </SectionTitle>
-            <HomeLocation
-              homeId={home.id}
-              location={home.location}
-              onSaved={(location) => {
-                setData((current) =>
-                  current?.id === home.id ? { ...current, location } : current,
-                );
-                refresh();
-              }}
-            />
             <OutdoorWeather
               homeId={home.id}
               location={home.location}
