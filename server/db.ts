@@ -4,7 +4,7 @@ export function openDatabase(path: string): DatabaseSync {
   const db = new DatabaseSync(path);
   const version = (db.prepare('PRAGMA user_version').get() as { user_version: number })
     .user_version;
-  if (version > 10) {
+  if (version > 11) {
     db.close();
     throw new Error('Unsupported database version');
   }
@@ -206,6 +206,14 @@ export function openDatabase(path: string): DatabaseSync {
           WHERE temperature IS NOT NULL;
         PRAGMA user_version=10;
       `);
+    });
+  if (version < 11)
+    transaction(db, () => {
+      db.exec(`CREATE TABLE IF NOT EXISTS home_locations (
+        home_id TEXT PRIMARY KEY REFERENCES homes(id) ON DELETE CASCADE,
+        label TEXT NOT NULL, latitude REAL NOT NULL CHECK(latitude BETWEEN -90 AND 90),
+        longitude REAL NOT NULL CHECK(longitude BETWEEN -180 AND 180)
+      ); PRAGMA user_version=11;`);
     });
   return db;
 }

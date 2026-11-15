@@ -1,3 +1,5 @@
+import { WeatherService } from './weather.js';
+import { registerWeatherRoutes } from './weatherRoutes.js';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
@@ -27,6 +29,7 @@ import { emailEnabled } from './notificationEvents.js';
 import { transaction } from './db.js';
 
 interface Dependencies {
+  weather?: WeatherService;
   db?: DatabaseSync;
   background?: boolean;
   tuya?: TuyaCall;
@@ -220,6 +223,8 @@ export async function createApp(config: Config, dependencies: Dependencies = {})
     reply.clearCookie('tem_session', cookieOptions);
     return { ok: true };
   });
+
+  registerWeatherRoutes(app, db, dependencies.weather ?? new WeatherService());
 
   app.get('/api/overview', async (request) =>
     getOverview(db, Date.now(), daysSchema.parse((request.query as any).days)),

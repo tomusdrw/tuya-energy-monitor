@@ -164,6 +164,40 @@ History starts with collection after this update, persists across restarts and i
 not backfilled from the Tuya mobile app. There are no temperature/humidity alerts
 or device controls.
 
+### Outdoor temperature and heating forecast
+
+In **Climate history**, choose **Edit location**, search by street and city, select
+an address, then **Save location**. Each apartment keeps its own location. The
+saved address is shown as a summary; Cancel discards changes. Remove location and
+save to disable outdoor weather. Address searches go to
+[Photon](https://github.com/komoot/photon) using OpenStreetMap data, only when you
+press Search (or Enter). No weather requests are made until a location is saved.
+
+A blue line adds the outside daily mean to the temperature chart, on the same °C
+scale as indoor readings. The temperature chart extends through **three calendar
+days after today**. Today and those three days use a dashed line labelled
+**Forecast**, also identified in tooltips and the daily values list. Indoor
+readings and humidity are never extrapolated. Missing values remain gaps.
+
+[Open-Meteo](https://open-meteo.com/en/docs) provides daily model averages at the
+selected coordinates, including archived forecasts for past days; these are not
+measurements from a local weather station. Dates use Europe/Warsaw. Provider daily
+aggregates use their 24-hour convention, which may differ from the indoor
+23/25-hour day at a daylight-saving transition. Weather loads independently, so
+provider outages do not hide indoor readings. Results are cached for 30 minutes
+by coordinates, date and range; address searches are cached for 24 hours. Both
+caches are bounded, memory-only, and cleared on restart. Requests time out after
+10 seconds. Changing location loads weather for the new coordinates.
+
+The public Photon service permits reasonable use without availability guarantees.
+Searches are limited to one upstream request per second per application process
+and 20 requests per minute per client. Set `PHOTON_URL` to another Photon-compatible
+search endpoint for heavier usage. Open-Meteo's public endpoint is for
+[non-commercial use](https://open-meteo.com/en/terms); review provider terms before
+commercial deployment. Weather attribution is CC BY 4.0; address data attribution
+is OpenStreetMap/ODbL. The weather service receives coordinates, not the saved
+address label. No API keys are needed with these public endpoints.
+
 ## Optional Tuya.ai energy meters
 
 In **Connected accounts**, use the **Tuya.ai** form on the relevant Smart Life
@@ -591,6 +625,8 @@ energy/climate history are preserved.
 Schema v10 adds independent temperature participation, enabled for existing and new
 devices by default, and an index for finding devices with recorded temperatures.
 Existing energy participation, ignored status and observations are preserved.
+
+Schema v11 adds `home_locations`, preserving all existing apartment and device data.
 
 Run one process per database. Raw readings, climate/heating observations and intervals are retained; size grows
 with time and the number of devices. Schedule volume backups and monitor disk
